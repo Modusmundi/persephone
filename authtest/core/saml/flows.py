@@ -140,6 +140,33 @@ def _dict_to_preflight(data: dict[str, Any]) -> PreflightResult:
     )
 
 
+def _signature_validation_to_dict(sig_result: Any) -> dict[str, Any] | None:
+    """Convert SignatureValidationResult to dict for storage."""
+    if sig_result is None:
+        return None
+
+    return {
+        "status": sig_result.status.value,
+        "message": sig_result.message,
+        "signatures": [
+            {
+                "location": s.location.value,
+                "signature_algorithm": s.signature_algorithm,
+                "signature_algorithm_name": s.signature_algorithm_name,
+                "digest_algorithm": s.digest_algorithm,
+                "digest_algorithm_name": s.digest_algorithm_name,
+                "canonicalization_method": s.canonicalization_method,
+                "canonicalization_method_name": s.canonicalization_method_name,
+                "reference_uri": s.reference_uri,
+                "certificate_embedded": s.certificate_embedded,
+            }
+            for s in sig_result.signatures
+        ],
+        "trace": sig_result.trace,
+        "warnings": sig_result.warnings,
+    }
+
+
 def _response_to_dict(response: SAMLResponse) -> dict[str, Any]:
     """Convert SAMLResponse to dict for storage."""
     return {
@@ -151,6 +178,7 @@ def _response_to_dict(response: SAMLResponse) -> dict[str, Any]:
         "status_message": response.status_message,
         "is_success": response.is_success,
         "validation_errors": response.validation_errors,
+        "signature_validation": _signature_validation_to_dict(response.signature_validation),
         "assertions": [
             {
                 "assertion_id": a.assertion_id,

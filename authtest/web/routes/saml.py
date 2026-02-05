@@ -16,11 +16,18 @@ from flask import (
     session,
     url_for,
 )
+from markupsafe import Markup
 
 if TYPE_CHECKING:
     from werkzeug.wrappers import Response as WerkzeugResponse
 
 from authtest.core.saml.flows import FlowState, FlowStatus, IdPInitiatedFlow, SPInitiatedFlow
+from authtest.core.saml.utils import (
+    get_attribute_info,
+    get_authn_context_description,
+    get_nameid_format_description,
+    pretty_print_xml,
+)
 from authtest.storage.database import get_database
 from authtest.storage.models import IdPProvider, IdPType
 
@@ -37,6 +44,90 @@ saml_bp = Blueprint(
 
 # Session key for storing flow state
 FLOW_STATE_KEY = "saml_flow_state"
+
+
+# Register template filters for SAML utilities
+@saml_bp.app_template_filter("pretty_xml")
+def pretty_xml_filter(xml_string: str) -> str:
+    """Template filter to pretty-print XML."""
+    return pretty_print_xml(xml_string)
+
+
+@saml_bp.app_template_filter("saml_attr_info")
+def saml_attr_info_filter(attr_name: str) -> dict[str, str]:
+    """Template filter to get SAML attribute info."""
+    return get_attribute_info(attr_name)
+
+
+@saml_bp.app_template_filter("nameid_format_desc")
+def nameid_format_desc_filter(format_uri: str) -> str:
+    """Template filter to get NameID format description."""
+    return get_nameid_format_description(format_uri)
+
+
+@saml_bp.app_template_filter("authn_context_desc")
+def authn_context_desc_filter(context_uri: str) -> str:
+    """Template filter to get authentication context description."""
+    return get_authn_context_description(context_uri)
+
+
+def highlight_xml(xml_string: str) -> str:
+    """Apply syntax highlighting to XML string.
+
+    Returns HTML with span tags for syntax highlighting.
+    """
+    import html
+    import re
+
+    # Escape HTML first
+    escaped = html.escape(xml_string)
+
+    # Highlight XML tags
+    # Match opening/closing tags and self-closing tags
+    escaped = re.sub(
+        r"(&lt;/?)([\w:-]+)",
+        r'<span class="xml-bracket">\1</span><span class="xml-tag">\2</span>',
+        escaped,
+    )
+    # Match closing bracket
+    escaped = re.sub(
+        r"(/?)(&gt;)",
+        r'<span class="xml-bracket">\1\2</span>',
+        escaped,
+    )
+    # Match attributes (name="value")
+    escaped = re.sub(
+        r"([\w:-]+)(=)(&quot;)([^&]*)(&quot;)",
+        r'<span class="xml-attr">\1</span><span class="xml-equals">\2</span>'
+        r'<span class="xml-string">\3\4\5</span>',
+        escaped,
+    )
+    # Match XML declaration
+    escaped = re.sub(
+        r"(&lt;\?xml)",
+        r'<span class="xml-decl">\1</span>',
+        escaped,
+    )
+    escaped = re.sub(
+        r"(\?&gt;)",
+        r'<span class="xml-decl">\1</span>',
+        escaped,
+    )
+    # Match comments
+    escaped = re.sub(
+        r"(&lt;!--.*?--&gt;)",
+        r'<span class="xml-comment">\1</span>',
+        escaped,
+        flags=re.DOTALL,
+    )
+
+    return escaped
+
+
+@saml_bp.app_template_filter("highlight_xml")
+def highlight_xml_filter(xml_string: str) -> Markup:
+    """Template filter to highlight XML syntax."""
+    return Markup(highlight_xml(xml_string))
 
 
 def get_base_url() -> str:
@@ -248,8 +339,7 @@ def handle_idp_initiated_acs(saml_response: str) -> str | WerkzeugResponse:
 
         if not idp:
             flash(
-                f"Unknown Identity Provider: {parsed.issuer}. "
-                "Please configure this IdP first.",
+                f"Unknown Identity Provider: {parsed.issuer}. Please configure this IdP first.",
                 "error",
             )
             return redirect(url_for("saml.index"))

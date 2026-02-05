@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from xml.etree import ElementTree
 
 if TYPE_CHECKING:
+    from authtest.core.saml.signature import SignatureValidationResult
     from authtest.storage.models import ClientConfig, IdPProvider
 
 
@@ -92,6 +93,7 @@ class SAMLResponse:
     assertions: list[SAMLAssertion] = field(default_factory=list)
     is_success: bool = False
     validation_errors: list[str] = field(default_factory=list)
+    signature_validation: SignatureValidationResult | None = None
 
     @classmethod
     def parse(cls, encoded_response: str) -> SAMLResponse:
@@ -508,7 +510,30 @@ class SAMLServiceProvider:
         Returns:
             Parsed SAMLResponse with validation results.
         """
+        from authtest.core.saml.signature import (
+            SignatureStatus,
+            validate_signature,
+        )
+
         response = SAMLResponse.parse(saml_response)
+
+        # Validate signature if we have the XML
+        if response.raw_xml:
+            sig_result = validate_signature(response.raw_xml, self.idp.x509_cert)
+            response.signature_validation = sig_result
+
+            # Add signature validation errors to the response errors
+            if sig_result.status == SignatureStatus.INVALID:
+                response.validation_errors.append(
+                    f"Signature validation failed: {sig_result.message}"
+                )
+            elif sig_result.status == SignatureStatus.ERROR:
+                response.validation_errors.append(
+                    f"Signature validation error: {sig_result.message}"
+                )
+            # Note: MISSING and NO_CERTIFICATE are informational, not errors
+            # The SP metadata indicates WantAssertionsSigned="true", but we don't
+            # fail validation for missing signatures to allow for testing/debugging
 
         # Basic validation
         if not response.is_success:

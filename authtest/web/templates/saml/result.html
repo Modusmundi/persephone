@@ -3,7 +3,94 @@
 {% block title %}SSO Test Result - AuthTest{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto">
+<style>
+    /* XML Syntax Highlighting */
+    .xml-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 0.75rem;
+        line-height: 1.5;
+    }
+    .xml-viewer .xml-tag { color: #569cd6; }
+    .xml-viewer .xml-bracket { color: #808080; }
+    .xml-viewer .xml-attr { color: #9cdcfe; }
+    .xml-viewer .xml-equals { color: #d4d4d4; }
+    .xml-viewer .xml-string { color: #ce9178; }
+    .xml-viewer .xml-comment { color: #6a9955; font-style: italic; }
+    .xml-viewer .xml-decl { color: #c586c0; }
+
+    /* Light mode adjustments */
+    @media (prefers-color-scheme: light) {
+        .xml-viewer {
+            background: #f5f5f5;
+            color: #333;
+        }
+        .xml-viewer .xml-tag { color: #0000ff; }
+        .xml-viewer .xml-bracket { color: #666; }
+        .xml-viewer .xml-attr { color: #ff0000; }
+        .xml-viewer .xml-string { color: #008000; }
+        .xml-viewer .xml-comment { color: #808080; }
+        .xml-viewer .xml-decl { color: #800080; }
+    }
+
+    /* For explicit dark mode class */
+    .dark .xml-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+    }
+    .dark .xml-viewer .xml-tag { color: #569cd6; }
+    .dark .xml-viewer .xml-bracket { color: #808080; }
+    .dark .xml-viewer .xml-attr { color: #9cdcfe; }
+    .dark .xml-viewer .xml-string { color: #ce9178; }
+    .dark .xml-viewer .xml-comment { color: #6a9955; }
+    .dark .xml-viewer .xml-decl { color: #c586c0; }
+
+    /* Timeline styles */
+    .timeline {
+        position: relative;
+        padding-left: 2rem;
+    }
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 0.5rem;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e5e7eb;
+    }
+    .dark .timeline::before {
+        background: #374151;
+    }
+    .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+    }
+    .timeline-item:last-child {
+        padding-bottom: 0;
+    }
+    .timeline-dot {
+        position: absolute;
+        left: -1.75rem;
+        width: 1rem;
+        height: 1rem;
+        border-radius: 50%;
+        border: 2px solid;
+        background: white;
+    }
+    .dark .timeline-dot {
+        background: #1f2937;
+    }
+    .timeline-dot.completed { border-color: #10b981; background: #10b981; }
+    .timeline-dot.failed { border-color: #ef4444; background: #ef4444; }
+    .timeline-dot.pending { border-color: #9ca3af; }
+</style>
+
+<div class="max-w-5xl mx-auto">
     <h1 class="text-2xl font-bold mb-2">{% if flow_type == 'idp_initiated' %}IdP-Initiated{% else %}SP-Initiated{% endif %} SSO Test Result</h1>
     <p class="text-gray-600 dark:text-gray-400 mb-6">
         Tested against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
@@ -50,6 +137,111 @@
                 <div class="text-right">
                     <p class="text-sm text-gray-500 dark:text-gray-400">Duration</p>
                     <p class="text-2xl font-semibold">{{ (result.duration_ms / 1000) | round(2) }}s</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Authentication Flow Timeline -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Authentication Flow Timeline</h2>
+        </div>
+        <div class="p-4">
+            <div class="timeline">
+                {% if flow_type == 'sp_initiated' %}
+                <!-- SP-Initiated Flow Steps -->
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Flow Started</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">SP initiated authentication request</p>
+                        </div>
+                        {% if state.started_at %}
+                        <span class="text-xs text-gray-400">{{ state.started_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if state.preflight %}
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.preflight.all_passed %}completed{% else %}failed{% endif %}"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Preflight Checks</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {% if state.preflight.all_passed %}All checks passed{% else %}Some checks failed{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if state.request_id %}
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">AuthnRequest Sent</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Redirected to IdP for authentication</p>
+                            <p class="text-xs font-mono text-gray-400 mt-1">ID: {{ state.request_id[:30] }}...</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <!-- IdP-Initiated Flow Steps -->
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Unsolicited Response Received</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">IdP sent assertion without prior request</p>
+                        </div>
+                        {% if state.started_at %}
+                        <span class="text-xs text-gray-400">{{ state.started_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if state.response %}
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.response.is_success %}completed{% else %}failed{% endif %}"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">SAML Response Received</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {% if state.response.is_success %}Success status{% else %}{{ state.response.status_code }}{% endif %}
+                            </p>
+                            <p class="text-xs font-mono text-gray-400 mt-1">ID: {{ state.response.response_id[:30] }}...</p>
+                        </div>
+                        {% if state.response.issue_instant %}
+                        <span class="text-xs text-gray-400">{{ state.response.issue_instant }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.status.value == 'completed' %}completed{% else %}failed{% endif %}"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Validation {% if state.status.value == 'completed' %}Passed{% else %}Failed{% endif %}</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {% if state.response.validation_errors %}
+                                {{ state.response.validation_errors | length }} error(s) found
+                                {% else %}
+                                All validations passed
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% if state.completed_at %}
+                        <span class="text-xs text-gray-400">{{ state.completed_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endif %}
             </div>
@@ -104,6 +296,138 @@
         </div>
     </div>
 
+    <!-- Signature Validation -->
+    {% if state.response.signature_validation %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Signature Validation</h2>
+        </div>
+        <div class="p-4">
+            <!-- Validation Status -->
+            <div class="flex items-center mb-4">
+                {% set sig = state.response.signature_validation %}
+                {% if sig.status.value == 'valid' %}
+                <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-semibold text-green-600 dark:text-green-400">Signature Valid</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ sig.message }}</p>
+                </div>
+                {% elif sig.status.value == 'invalid' %}
+                <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-semibold text-red-600 dark:text-red-400">Signature Invalid</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ sig.message }}</p>
+                </div>
+                {% elif sig.status.value == 'missing' %}
+                <div class="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-semibold text-yellow-600 dark:text-yellow-400">No Signature</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ sig.message }}</p>
+                </div>
+                {% elif sig.status.value == 'no_certificate' %}
+                <div class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-600 dark:text-gray-400">Signature Not Verified</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ sig.message }}</p>
+                </div>
+                {% else %}
+                <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center mr-3">
+                    <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-semibold text-red-600 dark:text-red-400">Validation Error</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ sig.message }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Signature Details -->
+            {% if sig.signatures %}
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-sm mb-3">Signature Details</h3>
+                {% for signature in sig.signatures %}
+                <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 mb-2">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium">
+                            Signature {{ loop.index }}
+                            <span class="text-gray-500 dark:text-gray-400 font-normal">
+                                ({{ signature.location.value | capitalize }})
+                            </span>
+                        </span>
+                        {% if signature.certificate_embedded %}
+                        <span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                            Certificate Embedded
+                        </span>
+                        {% endif %}
+                    </div>
+                    <dl class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Algorithm</dt>
+                            <dd class="font-medium">{{ signature.signature_algorithm_name or 'Unknown' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Digest</dt>
+                            <dd class="font-medium">{{ signature.digest_algorithm_name or 'Unknown' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Canonicalization</dt>
+                            <dd class="font-medium">{{ signature.canonicalization_method_name or 'Unknown' }}</dd>
+                        </div>
+                    </dl>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Warnings -->
+            {% if sig.warnings %}
+            <div class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
+                <p class="font-medium text-yellow-700 dark:text-yellow-400 text-sm">Warnings:</p>
+                <ul class="mt-1 text-sm text-yellow-600 dark:text-yellow-300 list-disc list-inside">
+                    {% for warning in sig.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Debug Trace (Collapsible) -->
+            {% if sig.trace %}
+            <details class="mt-4">
+                <summary class="cursor-pointer text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+                    View Debug Trace ({{ sig.trace | length }} entries)
+                </summary>
+                <div class="mt-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <ol class="text-xs font-mono text-gray-600 dark:text-gray-400 space-y-1 list-decimal list-inside">
+                        {% for trace_entry in sig.trace %}
+                        <li>{{ trace_entry }}</li>
+                        {% endfor %}
+                    </ol>
+                </div>
+            </details>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     {% if state.response.assertions %}
     <!-- Assertion Details -->
     {% for assertion in state.response.assertions %}
@@ -112,49 +436,88 @@
             <h2 class="text-lg font-semibold">Assertion {% if loop.length > 1 %}{{ loop.index }}{% endif %}</h2>
         </div>
         <div class="p-4">
-            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                    <dt class="text-gray-500 dark:text-gray-400">Subject (NameID)</dt>
-                    <dd class="font-mono mt-1 break-all">{{ assertion.subject_name_id or 'Not provided' }}</dd>
-                </div>
-                <div>
-                    <dt class="text-gray-500 dark:text-gray-400">NameID Format</dt>
-                    <dd class="font-mono text-xs mt-1 break-all">{{ assertion.subject_name_id_format or 'Not specified' }}</dd>
-                </div>
-                <div>
-                    <dt class="text-gray-500 dark:text-gray-400">Authentication Instant</dt>
-                    <dd class="mt-1">{{ assertion.authn_instant or 'Not provided' }}</dd>
-                </div>
-                <div>
-                    <dt class="text-gray-500 dark:text-gray-400">Authentication Context</dt>
-                    <dd class="font-mono text-xs mt-1 break-all">{{ assertion.authn_context_class_ref or 'Not specified' }}</dd>
-                </div>
-                {% if assertion.session_index %}
-                <div>
-                    <dt class="text-gray-500 dark:text-gray-400">Session Index</dt>
-                    <dd class="font-mono text-xs mt-1 break-all">{{ assertion.session_index }}</dd>
-                </div>
-                {% endif %}
-            </dl>
+            <!-- Subject Information -->
+            <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
+                <h3 class="font-semibold text-sm text-blue-800 dark:text-blue-300 mb-2">Subject Identity</h3>
+                <dl class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                        <dt class="text-gray-600 dark:text-gray-400">NameID Value</dt>
+                        <dd class="font-mono mt-1 break-all text-blue-900 dark:text-blue-100">{{ assertion.subject_name_id or 'Not provided' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-600 dark:text-gray-400">NameID Format</dt>
+                        <dd class="mt-1">
+                            {% if assertion.subject_name_id_format %}
+                            <span class="font-mono text-xs break-all">{{ assertion.subject_name_id_format }}</span>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {{ assertion.subject_name_id_format | nameid_format_desc }}
+                            </p>
+                            {% else %}
+                            <span class="text-gray-500">Not specified</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- Authentication Statement -->
+            <div class="mb-4">
+                <h3 class="font-semibold text-sm mb-2">Authentication Statement</h3>
+                <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-gray-500 dark:text-gray-400">Authentication Instant</dt>
+                        <dd class="mt-1">{{ assertion.authn_instant or 'Not provided' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-gray-500 dark:text-gray-400">Authentication Context</dt>
+                        <dd class="mt-1">
+                            {% if assertion.authn_context_class_ref %}
+                            <span class="font-mono text-xs break-all">{{ assertion.authn_context_class_ref }}</span>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {{ assertion.authn_context_class_ref | authn_context_desc }}
+                            </p>
+                            {% else %}
+                            <span class="text-gray-500">Not specified</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% if assertion.session_index %}
+                    <div>
+                        <dt class="text-gray-500 dark:text-gray-400">Session Index</dt>
+                        <dd class="font-mono text-xs mt-1 break-all">{{ assertion.session_index }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
 
             {% if assertion.attributes %}
-            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <h3 class="font-semibold text-sm mb-3">Attributes</h3>
+            <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-sm mb-3">Attributes ({{ assertion.attributes | length }})</h3>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-gray-700">
-                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400">Name</th>
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Name</th>
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Description</th>
                                 <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value(s)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for name, values in assertion.attributes.items() %}
+                            {% set attr_info = name | saml_attr_info %}
                             <tr class="border-b border-gray-100 dark:border-gray-700">
-                                <td class="py-2 pr-4 font-mono text-xs break-all align-top">{{ name }}</td>
+                                <td class="py-2 pr-4 align-top">
+                                    <span class="font-medium">{{ attr_info.name }}</span>
+                                    {% if attr_info.name != name %}
+                                    <p class="font-mono text-xs text-gray-400 mt-1 break-all">{{ name }}</p>
+                                    {% endif %}
+                                </td>
+                                <td class="py-2 pr-4 align-top text-gray-500 dark:text-gray-400 text-xs">
+                                    {{ attr_info.description }}
+                                </td>
                                 <td class="py-2">
                                     {% for value in values %}
-                                    <span class="inline-block bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs mr-1 mb-1">{{ value }}</span>
+                                    <span class="inline-block bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs mr-1 mb-1 break-all">{{ value }}</span>
                                     {% endfor %}
                                 </td>
                             </tr>
@@ -163,21 +526,33 @@
                     </table>
                 </div>
             </div>
+            {% else %}
+            <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <p class="text-sm text-gray-500 dark:text-gray-400 italic">No attributes in this assertion</p>
+            </div>
             {% endif %}
         </div>
     </div>
     {% endfor %}
     {% endif %}
 
-    <!-- Raw XML (Collapsible) -->
+    <!-- Raw SAML Response XML (Collapsible with Syntax Highlighting) -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
         <details>
             <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <span class="font-semibold">Raw SAML Response XML</span>
-                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+                <span class="font-semibold">SAML Response XML</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand - syntax highlighted)</span>
             </summary>
             <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-                <pre class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap break-all">{{ state.response.raw_xml }}</pre>
+                <div class="flex justify-end mb-2">
+                    <button
+                        onclick="copyToClipboard('response-xml')"
+                        class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                    >
+                        Copy XML
+                    </button>
+                </div>
+                <pre id="response-xml" class="xml-viewer whitespace-pre-wrap">{{ state.response.raw_xml | pretty_xml | highlight_xml }}</pre>
             </div>
         </details>
     </div>
@@ -189,10 +564,18 @@
         <details>
             <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                 <span class="font-semibold">AuthnRequest XML</span>
-                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand - syntax highlighted)</span>
             </summary>
             <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-                <pre class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap break-all">{{ state.request_xml }}</pre>
+                <div class="flex justify-end mb-2">
+                    <button
+                        onclick="copyToClipboard('request-xml')"
+                        class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                    >
+                        Copy XML
+                    </button>
+                </div>
+                <pre id="request-xml" class="xml-viewer whitespace-pre-wrap">{{ state.request_xml | pretty_xml | highlight_xml }}</pre>
             </div>
         </details>
     </div>
@@ -227,4 +610,21 @@
         Result saved with ID: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ result_id }}</code>
     </p>
 </div>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    // Get text content without HTML tags
+    const text = element.textContent || element.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        // Show brief feedback
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 1500);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+    });
+}
+</script>
 {% endblock %}

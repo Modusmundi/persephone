@@ -34,6 +34,8 @@ dependencies = [
 
     # SAML
     "python3-saml>=1.16.0",
+    "signxml>=4.0.0",  # XML signature validation
+    "lxml>=5.0.0",  # Required by signxml
 
     # OIDC/OAuth
     "authlib>=1.3.0",
@@ -130,6 +132,8 @@ module = [
     "authlib.*",
     "sqlcipher3.*",
     "pysqlcipher3.*",
+    "signxml.*",
+    "lxml.*",
 ]
 ignore_missing_imports = true
 
