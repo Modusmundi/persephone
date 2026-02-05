@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - AuthTest</title>
+    <link rel="stylesheet" href="{{ url_for('main.static', filename='css/tailwind.min.css') }}">
+    <script src="{{ url_for('main.static', filename='js/htmx.min.js') }}"></script>
+    <script src="{{ url_for('main.static', filename='js/theme.js') }}"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-8">
+            <div class="text-center mb-8">
+                <h1 class="text-2xl font-bold">AuthTest</h1>
+                <p class="text-gray-500 dark:text-gray-400 mt-2">SAML/OIDC Testing Tool</p>
+            </div>
+
+            {% if error %}
+            <div class="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-md">
+                <p class="text-red-700 dark:text-red-300 text-sm">{{ error }}</p>
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if next_url %}
+                <input type="hidden" name="next" value="{{ next_url }}">
+                {% endif %}
+
+                <div>
+                    <label for="password" class="block text-sm font-medium mb-2">Password</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required
+                        autofocus
+                        class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                        placeholder="Enter your password"
+                    >
+                </div>
+
+                <button
+                    type="submit"
+                    class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                >
+                    Sign In
+                </button>
+            </form>
+        </div>
+
+        <div class="mt-4 text-center">
+            <button
+                id="theme-toggle"
+                type="button"
+                class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+            >
+                <span id="theme-label">Toggle Theme</span>
+            </button>
+        </div>
+    </div>
+</body>
+</html>

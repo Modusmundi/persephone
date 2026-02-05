@@ -239,3 +239,59 @@ class MigrationHistory(Base):
 
     def __repr__(self) -> str:
         return f"<MigrationHistory(version='{self.version}')>"
+
+
+class AppUser(Base):
+    """Application user for authentication.
+
+    Stores password hash for protecting application access.
+    Currently supports a single admin user.
+    """
+
+    __tablename__ = "app_users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 hex
+    password_salt: Mapped[str] = mapped_column(String(64), nullable=False)  # 32 bytes hex
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    sessions: Mapped[list[UserSession]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<AppUser(username='{self.username}')>"
+
+
+class UserSession(Base):
+    """Active user session.
+
+    Stores session tokens for authenticated users.
+    Tokens are stored hashed for security.
+    """
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_users.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)  # SHA-256 hex
+
+    # Session timing
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_activity: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # Relationships
+    user: Mapped[AppUser] = relationship(back_populates="sessions")
+
+    def __repr__(self) -> str:
+        return f"<UserSession(user_id={self.user_id}, expires_at='{self.expires_at}')>"

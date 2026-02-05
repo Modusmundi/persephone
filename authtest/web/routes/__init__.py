@@ -25,8 +25,8 @@ def index() -> str:
 
 
 @main_bp.route("/health")
-def health() -> dict:
-    """Health check endpoint."""
+def health() -> dict[str, str]:
+    """Health check endpoint (unauthenticated)."""
     return {"status": "healthy"}
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 import ssl
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,19 +25,39 @@ def create_app(config: dict | None = None) -> Flask:
     """
     app = Flask(__name__)
 
+    # Generate a secure secret key if not provided
+    secret_key = os.environ.get("AUTHTEST_SECRET_KEY")
+    if not secret_key:
+        # Use a persistent secret key from the config directory
+        key_path = Path.home() / ".authtest" / "flask_secret.key"
+        if key_path.exists():
+            secret_key = key_path.read_text().strip()
+        else:
+            secret_key = secrets.token_hex(32)
+            key_path.parent.mkdir(parents=True, exist_ok=True)
+            key_path.write_text(secret_key)
+            key_path.chmod(0o600)
+
     # Default configuration
     app.config.from_mapping(
-        SECRET_KEY="dev",
+        SECRET_KEY=secret_key,
         DATABASE_PATH="~/.authtest/data.db",
+        AUTH_ENABLED=True,
+        SESSION_TIMEOUT_MINUTES=60,
     )
 
     if config:
         app.config.from_mapping(config)
 
-    # Register blueprints
+    # Register main blueprints
     from authtest.web import routes
 
     routes.init_app(app)
+
+    # Initialize authentication
+    from authtest.web.routes.auth import init_auth
+
+    init_auth(app)
 
     return app
 
@@ -72,18 +94,26 @@ def run_server(
     """
     from authtest.core.config import load_config
     from authtest.core.crypto import ensure_tls_certificate
+    from authtest.storage.database import get_database
 
     # Load configuration
     if app_config is None:
         app_config = load_config()
+
+    # Initialize database (ensures tables exist)
+    db = get_database()
+    db.init_db()
 
     # Apply overrides
     server_host = host or app_config.server.host
     server_port = port or app_config.server.port
     tls_settings = app_config.server.tls
 
-    # Create Flask app
-    app = create_app()
+    # Create Flask app with auth settings
+    app = create_app({
+        "AUTH_ENABLED": app_config.auth.enabled,
+        "SESSION_TIMEOUT_MINUTES": app_config.auth.session_timeout_minutes,
+    })
     app.debug = app_config.server.debug
 
     ssl_context: ssl.SSLContext | None = None

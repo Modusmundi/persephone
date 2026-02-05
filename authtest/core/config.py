@@ -57,6 +57,29 @@ class TLSSettings:
 
 
 @dataclass
+class AuthSettings:
+    """Authentication configuration settings."""
+
+    enabled: bool = True
+    session_timeout_minutes: int = 60
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AuthSettings:
+        """Create AuthSettings from a dictionary."""
+        return cls(
+            enabled=data.get("enabled", True),
+            session_timeout_minutes=data.get("session_timeout_minutes", 60),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "enabled": self.enabled,
+            "session_timeout_minutes": self.session_timeout_minutes,
+        }
+
+
+@dataclass
 class ServerSettings:
     """Server configuration settings."""
 
@@ -91,14 +114,17 @@ class AppConfig:
     """Main application configuration."""
 
     server: ServerSettings = field(default_factory=ServerSettings)
+    auth: AuthSettings = field(default_factory=AuthSettings)
     config_path: Path | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], config_path: Path | None = None) -> AppConfig:
         """Create AppConfig from a dictionary."""
         server_data = data.get("server", {})
+        auth_data = data.get("auth", {})
         return cls(
             server=ServerSettings.from_dict(server_data) if server_data else ServerSettings(),
+            auth=AuthSettings.from_dict(auth_data) if auth_data else AuthSettings(),
             config_path=config_path,
         )
 
@@ -106,6 +132,7 @@ class AppConfig:
         """Convert to dictionary for serialization."""
         return {
             "server": self.server.to_dict(),
+            "auth": self.auth.to_dict(),
         }
 
     def save(self, path: Path | None = None) -> None:
@@ -197,6 +224,15 @@ def load_config(config_path: Path | None = None) -> AppConfig:
     if os.environ.get(f"{ENV_PREFIX}TLS_DAYS_VALID"):
         tls.days_valid = _get_env_int(f"{ENV_PREFIX}TLS_DAYS_VALID", tls.days_valid)
 
+    # Auth settings
+    auth = config.auth
+    auth.enabled = _get_env_bool(f"{ENV_PREFIX}AUTH_ENABLED", auth.enabled)
+
+    if os.environ.get(f"{ENV_PREFIX}SESSION_TIMEOUT"):
+        auth.session_timeout_minutes = _get_env_int(
+            f"{ENV_PREFIX}SESSION_TIMEOUT", auth.session_timeout_minutes
+        )
+
     return config
 
 
@@ -239,4 +275,14 @@ server:
 
     # Days the auto-generated certificate is valid
     days_valid: 365
+
+# Authentication settings
+auth:
+  # Enable password protection for the application
+  # Set to false for local-only deployments that don't need authentication
+  enabled: true
+
+  # Session timeout in minutes
+  # After this time of inactivity, users must log in again
+  session_timeout_minutes: 60
 """
