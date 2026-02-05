@@ -4,10 +4,18 @@ from pathlib import Path
 
 from flask import Blueprint, Flask, render_template
 
-# Get the templates directory relative to this package
-_templates_dir = Path(__file__).parent.parent / "templates"
+# Get the directories relative to this package
+_web_dir = Path(__file__).parent.parent
+_templates_dir = _web_dir / "templates"
+_static_dir = _web_dir / "static"
 
-main_bp = Blueprint("main", __name__, template_folder=str(_templates_dir))
+main_bp = Blueprint(
+    "main",
+    __name__,
+    template_folder=str(_templates_dir),
+    static_folder=str(_static_dir),
+    static_url_path="/assets",
+)
 
 
 @main_bp.route("/")
