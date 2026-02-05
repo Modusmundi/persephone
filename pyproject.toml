@@ -40,8 +40,8 @@ dependencies = [
 
     # Database
     "sqlalchemy>=2.0.0",
-    # Note: sqlcipher3 requires system-level SQLCipher installation
-    # "sqlcipher3>=0.5.0",
+    "sqlcipher3>=0.5.0",  # Requires system-level SQLCipher installation
+    "alembic>=1.13.0",
 
     # HTTP Client
     "httpx>=0.27.0",
@@ -128,6 +128,8 @@ module = [
     "onelogin.*",
     "weasyprint.*",
     "authlib.*",
+    "sqlcipher3.*",
+    "pysqlcipher3.*",
 ]
 ignore_missing_imports = true
 

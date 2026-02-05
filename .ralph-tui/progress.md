@@ -23,7 +23,15 @@ main_bp = Blueprint(
 In templates, reference with: `{{ url_for('main.static', filename='css/tailwind.min.css') }}`
 
 ### CLI Structure with Click
-CLI uses Click with group/command pattern. Subcommands are organized in separate modules and registered via `cli.add_command()`. Use underscore prefix (`_param`) for intentionally unused CLI parameters to satisfy ruff linting.
+CLI uses Click with group/command pattern. Subcommands are organized in separate modules and registered via `cli.add_command()`. Use underscore prefix (`_param`) for intentionally unused CLI parameters to satisfy ruff linting. Note: parameter names must match the Click option name for Click to properly map them.
+
+### SQLCipher Database Integration
+Database uses SQLCipher via `sqlcipher3` package with SQLAlchemy 2.x. Key patterns:
+- Use `sqlite+pysqlcipher:///path` as connection string
+- Configure encryption via SQLAlchemy event listener on "connect" event
+- Set PRAGMA key as first statement after opening connection
+- Store encryption key in file with 0600 permissions or via `AUTHTEST_DB_KEY` env var
+- Click's `path_type=Path` requires `# type: ignore[type-var]` for mypy compatibility
 
 ---
 
@@ -80,4 +88,34 @@ CLI uses Click with group/command pattern. Subcommands are organized in separate
   - Blueprint static files need `static_url_path` different from Flask's default `/static` to avoid route conflicts
   - Theme toggle should apply immediately on script load (before DOMContentLoaded) to prevent flash of wrong theme
   - Tailwind dark mode classes work with `.dark` class on document root
+---
+
+## 2026-02-05 - US-003
+- What was implemented:
+  - SQLCipher database integration with AES-256 encryption
+  - SQLAlchemy 2.x ORM models for IdPProvider, ClientConfig, Certificate, TestResult, AppSetting
+  - Encryption key management from environment variable or key file (~/.authtest/db.key)
+  - Key rotation support with `authtest db rotate-key` command
+  - Custom migration system (not Alembic - simpler for SQLCipher compatibility)
+  - CLI commands: db init, verify, migrate, rollback, status, rotate-key, generate-key
+
+- Files changed/created:
+  - `pyproject.toml` - Added sqlcipher3 and alembic dependencies, mypy ignores for sqlcipher3
+  - `authtest/storage/__init__.py` - Module exports for database and models
+  - `authtest/storage/database.py` - SQLCipher engine, key management, Database class
+  - `authtest/storage/models.py` - SQLAlchemy 2.x ORM models with proper type annotations
+  - `authtest/storage/migrations/__init__.py` - MigrationManager class
+  - `authtest/storage/migrations/versions/__init__.py` - Versions package
+  - `authtest/storage/migrations/versions/v001_initial_schema.py` - Initial migration
+  - `authtest/cli/db.py` - Database CLI commands
+  - `authtest/cli/main.py` - Updated init command to initialize database
+  - `tests/test_cli.py` - Added tests for db commands
+
+- **Learnings:**
+  - Click parameter names must match option names exactly (no underscore prefix for used params)
+  - SQLCipher PRAGMA key must be first statement after opening connection
+  - Use StrEnum instead of str+Enum inheritance (Python 3.11+)
+  - SQLAlchemy relationship forward references don't need quotes with `from __future__ import annotations`
+  - Click's `path_type=Path` has mypy incompatibility - use `# type: ignore[type-var]`
+  - `raise ... from None` is better than `raise ... from e` for user-facing exceptions to hide traceback
 ---
