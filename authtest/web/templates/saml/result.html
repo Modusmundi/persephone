@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}SSO Test Result - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">SP-Initiated SSO Test Result</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Tested against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    <!-- Result Summary -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    {% if result.outcome.value == 'passed' %}
+                    <div class="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-green-600 dark:text-green-400">Test Passed</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% elif result.outcome.value == 'failed' %}
+                    <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-red-600 dark:text-red-400">Test Failed</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% else %}
+                    <div class="w-16 h-16 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-yellow-600 dark:text-yellow-400">Test Error</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if result.duration_ms %}
+                <div class="text-right">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Duration</p>
+                    <p class="text-2xl font-semibold">{{ (result.duration_ms / 1000) | round(2) }}s</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if state.response %}
+    <!-- Response Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">SAML Response</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Response ID</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.response.response_id }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Issue Instant</dt>
+                    <dd class="mt-1">{{ state.response.issue_instant }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Issuer</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.response.issuer }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Status</dt>
+                    <dd class="mt-1">
+                        {% if state.response.is_success %}
+                        <span class="text-green-600 dark:text-green-400">Success</span>
+                        {% else %}
+                        <span class="text-red-600 dark:text-red-400">{{ state.response.status_code }}</span>
+                        {% if state.response.status_message %}
+                        <span class="text-gray-500"> - {{ state.response.status_message }}</span>
+                        {% endif %}
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+
+            {% if state.response.validation_errors %}
+            <div class="mt-4 p-3 bg-red-50 dark:bg-red-900/30 rounded-lg">
+                <p class="font-medium text-red-700 dark:text-red-400 text-sm">Validation Errors:</p>
+                <ul class="mt-1 text-sm text-red-600 dark:text-red-300 list-disc list-inside">
+                    {% for error in state.response.validation_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if state.response.assertions %}
+    <!-- Assertion Details -->
+    {% for assertion in state.response.assertions %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Assertion {% if loop.length > 1 %}{{ loop.index }}{% endif %}</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Subject (NameID)</dt>
+                    <dd class="font-mono mt-1 break-all">{{ assertion.subject_name_id or 'Not provided' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">NameID Format</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ assertion.subject_name_id_format or 'Not specified' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Authentication Instant</dt>
+                    <dd class="mt-1">{{ assertion.authn_instant or 'Not provided' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Authentication Context</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ assertion.authn_context_class_ref or 'Not specified' }}</dd>
+                </div>
+                {% if assertion.session_index %}
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Session Index</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ assertion.session_index }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+
+            {% if assertion.attributes %}
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-sm mb-3">Attributes</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 dark:border-gray-700">
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400">Name</th>
+                                <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value(s)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, values in assertion.attributes.items() %}
+                            <tr class="border-b border-gray-100 dark:border-gray-700">
+                                <td class="py-2 pr-4 font-mono text-xs break-all align-top">{{ name }}</td>
+                                <td class="py-2">
+                                    {% for value in values %}
+                                    <span class="inline-block bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs mr-1 mb-1">{{ value }}</span>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Raw XML (Collapsible) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <details>
+            <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-semibold">Raw SAML Response XML</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+            </summary>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <pre class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap break-all">{{ state.response.raw_xml }}</pre>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    <!-- Request Details (Collapsible) -->
+    {% if state.request_xml %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <details>
+            <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-semibold">AuthnRequest XML</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+            </summary>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <pre class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap break-all">{{ state.request_xml }}</pre>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="flex space-x-4">
+        <a
+            href="{{ url_for('saml.sp_initiated', idp_id=idp.id) }}"
+            class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Run Again
+        </a>
+        <a
+            href="{{ url_for('saml.index') }}"
+            class="flex-1 text-center bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Back to SAML Tests
+        </a>
+    </div>
+
+    <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+        Result saved with ID: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ result_id }}</code>
+    </p>
+</div>
+{% endblock %}

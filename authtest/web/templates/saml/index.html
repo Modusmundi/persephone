@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}SAML Tests - AuthTest{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">SAML Authentication Tests</h1>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="mb-6">
+    {% for category, message in messages %}
+    <div class="p-4 rounded-lg mb-2 {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% elif category == 'info' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200{% else %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- SP-Initiated SSO -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">SP-Initiated SSO</h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">
+            Test Service Provider initiated Single Sign-On. The application sends an
+            AuthnRequest to the IdP, which redirects the user back after authentication.
+        </p>
+
+        {% if idps %}
+        <form action="{{ url_for('saml.sp_initiated') }}" method="GET">
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2" for="idp_id">Select Identity Provider</label>
+                <select
+                    name="idp_id"
+                    id="idp_id"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                >
+                    <option value="">-- Select an IdP --</option>
+                    {% for idp in idps %}
+                    <option value="{{ idp.id }}">{{ idp.display_name or idp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button
+                type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+            >
+                Start Test
+            </button>
+        </form>
+        {% else %}
+        <div class="p-4 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200 rounded-lg">
+            <p class="font-semibold">No SAML Identity Providers configured</p>
+            <p class="text-sm mt-1">
+                Add a SAML IdP using the CLI: <code class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">authtest config idp add --type saml</code>
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- IdP-Initiated SSO (Coming Soon) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 opacity-60">
+        <h2 class="text-xl font-semibold mb-4">IdP-Initiated SSO</h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">
+            Test Identity Provider initiated Single Sign-On. The IdP sends an unsolicited
+            SAML Response to the application.
+        </p>
+        <div class="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <p class="text-gray-500 dark:text-gray-400 text-center">Coming Soon</p>
+        </div>
+    </div>
+
+    <!-- Single Logout (Coming Soon) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 opacity-60">
+        <h2 class="text-xl font-semibold mb-4">Single Logout (SLO)</h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">
+            Test SAML Single Logout flow. Logs out the user from both the SP and IdP.
+        </p>
+        <div class="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <p class="text-gray-500 dark:text-gray-400 text-center">Coming Soon</p>
+        </div>
+    </div>
+
+    <!-- SP Metadata -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4">SP Metadata</h2>
+        <p class="text-gray-600 dark:text-gray-400 mb-4">
+            Download or view the Service Provider metadata to configure your IdP.
+        </p>
+        <a
+            href="{{ url_for('saml.metadata') }}"
+            target="_blank"
+            class="inline-block bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+        >
+            View Metadata XML
+        </a>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-3">
+            Metadata URL: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ url_for('saml.metadata', _external=True) }}</code>
+        </p>
+    </div>
+</div>
+{% endblock %}

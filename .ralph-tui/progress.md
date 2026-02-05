@@ -5,72 +5,23 @@ after each iteration and it's included in prompts for context.
 
 ## Codebase Patterns (Study These First)
 
-### Flask Response Types
-- Use `WerkzeugResponse` from `werkzeug.wrappers` for redirect return types
-- Flask's `redirect()` returns werkzeug Response, not flask Response
-- Use `TYPE_CHECKING` block to import `WerkzeugResponse` for type hints
-
-### Auth Pattern
-- `before_request` hook in Flask for global authentication checks
-- Allow list for unauthenticated endpoints (login, setup, health, static files)
-- Session tokens stored hashed (SHA-256) in database for security
-- Sliding window session expiry: extend if < half timeout remaining
-
-### Test Configuration
-- Use `AUTH_ENABLED=False` in test fixtures to bypass authentication
-- Tests should run without database encryption key configured
-
-### SQLCipher Database Connection
-- pysqlcipher dialect expects passphrase in URL: `sqlite+pysqlcipher://:passphrase@/path`
-- Set AUTHTEST_DB_KEY env var for direct key access, AUTHTEST_DB_KEY_FILE for file-based
-- Additional cipher options (kdf_iter, cipher_page_size) set via event listener
+- **Flask Blueprint Pattern**: Routes are organized in blueprints under `authtest/web/routes/`. Each protocol (SAML, OIDC) gets its own blueprint with `url_prefix`.
+- **Template Organization**: Templates live in `authtest/web/templates/` with subdirectories per feature (e.g., `saml/`).
+- **Database Session Pattern**: Use `db.get_session()` in try/finally blocks, always close session in finally.
+- **Flow State Pattern**: Multi-step authentication flows store state in Flask session as dicts via `to_dict()`/`from_dict()`.
+- **Use `datetime.UTC`**: Import `UTC` from datetime (not `timezone.utc`) per ruff UP017 preference.
 
 ---
 
-## 2026-02-05 - US-005
-- What was implemented:
-  - Password authentication with PBKDF2-HMAC-SHA256 (600k iterations per OWASP 2023)
-  - Session management with secure random tokens and sliding window expiry
-  - First-run setup wizard for password creation
-  - Login page with CSRF protection
-  - Auth middleware (before_request hook) protecting all routes
-  - Configurable session timeout and auth enable/disable
-  - Logout functionality with session invalidation
-- Files changed:
-  - `authtest/core/auth.py` - New auth module with password hashing and session management
-  - `authtest/core/config.py` - Added AuthSettings (enabled, session_timeout_minutes)
-  - `authtest/storage/models.py` - Added AppUser and UserSession models
-  - `authtest/storage/migrations/versions/v002_auth_tables.py` - New migration for auth tables
-  - `authtest/web/routes/auth.py` - Login, logout, setup routes and before_request hook
-  - `authtest/web/templates/login.html` - Login page template
-  - `authtest/web/templates/setup.html` - First-run setup wizard template
-  - `authtest/web/templates/base.html` - Added logout button
-  - `authtest/app.py` - Integrated auth initialization and persistent secret key
-  - `tests/conftest.py` - Disabled auth for test fixtures
+## 2026-02-05 - US-007
+- **What was implemented**: SAML SP-Initiated SSO flow was already implemented. Fixed minor lint/type issues.
+- **Files changed**:
+  - `authtest/core/saml/sp.py` - Updated datetime import to use `UTC` alias, fixed nested if (SIM102)
+  - `authtest/core/saml/flows.py` - Removed unused import, updated datetime to use `UTC` alias
+  - `authtest/web/routes/saml.py` - Fixed return type annotation for metadata route
 - **Learnings:**
-  - Flask redirect returns werkzeug.wrappers.Response, not flask.wrappers.Response - use WerkzeugResponse type hint
-  - before_request hooks are ideal for global auth middleware
-  - Use cast() to satisfy mypy for config values from current_app.config
-  - Session tokens should be stored hashed to prevent compromise if DB is leaked
----
-
-## 2026-02-05 - US-006
-- What was implemented:
-  - Click-based CLI entry point (already existed, enhanced)
-  - `config init` command to initialize database with encryption key generation
-  - `config idp add/edit/remove/list/show` commands for Identity Provider management
-  - `config export/import` for configuration portability with JSON format
-  - JSON output mode (`--json` flag) on all config commands for scripting
-  - Interactive (`-i/--interactive`) and non-interactive modes for idp add
-  - Comprehensive test suite for all CLI config commands (31 tests)
-- Files changed:
-  - `authtest/cli/config.py` - Complete rewrite with full IdP CRUD, export/import, JSON mode
-  - `authtest/storage/database.py` - Fixed pysqlcipher connection to include key in URL
-  - `tests/test_cli.py` - Added comprehensive CLI test suite with isolated database fixtures
-- **Learnings:**
-  - pysqlcipher dialect requires passphrase in connection URL format `:passphrase@`
-  - Use `NoReturn` type hint for error functions that always raise or sys.exit
-  - Click's CliRunner with isolated filesystem helps test CLI commands with temp databases
-  - Set env vars for DB_PATH and DB_KEY to isolate test databases from real config
+  - Ruff prefers `datetime.UTC` over `timezone.utc` (UP017)
+  - Flask Response type must be imported from `flask` for proper type hints
+  - `current_app.make_response()` returns Any, need type annotation for mypy
 ---
 
