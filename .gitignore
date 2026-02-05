@@ -1,2 +1,7 @@
 # bv (beads viewer) local config and caches
 .bv/
+/tasks/prd.json
+/tasks/prd-product-requirements-document.md
+/.ralph-tui/
+/tasks/
+/.idea/
