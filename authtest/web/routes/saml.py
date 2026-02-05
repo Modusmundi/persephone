@@ -20,7 +20,7 @@ from flask import (
 if TYPE_CHECKING:
     from werkzeug.wrappers import Response as WerkzeugResponse
 
-from authtest.core.saml.flows import FlowState, FlowStatus, SPInitiatedFlow
+from authtest.core.saml.flows import FlowState, FlowStatus, IdPInitiatedFlow, SPInitiatedFlow
 from authtest.storage.database import get_database
 from authtest.storage.models import IdPProvider, IdPType
 
@@ -152,7 +152,11 @@ def sp_initiated() -> str | WerkzeugResponse:
 
 @saml_bp.route("/acs", methods=["POST"])
 def acs() -> str | WerkzeugResponse:
-    """Assertion Consumer Service - handles SAML Response from IdP."""
+    """Assertion Consumer Service - handles SAML Response from IdP.
+
+    Handles both SP-Initiated (with prior AuthnRequest) and IdP-Initiated
+    (unsolicited assertion) SSO flows.
+    """
     saml_response = request.form.get("SAMLResponse")
     relay_state = request.form.get("RelayState")
 
@@ -160,34 +164,101 @@ def acs() -> str | WerkzeugResponse:
         flash("No SAML Response received", "error")
         return redirect(url_for("saml.index"))
 
-    # Get flow state from session
+    # Get flow state from session (may be None for IdP-Initiated)
     state_dict = session.get(FLOW_STATE_KEY)
-    if not state_dict:
-        # No state - might be unsolicited response
-        flash("No active SSO flow found", "error")
-        return redirect(url_for("saml.index"))
 
-    state = FlowState.from_dict(state_dict)
+    if state_dict:
+        # SP-Initiated flow - we have a pending flow state
+        state = FlowState.from_dict(state_dict)
 
-    # Verify relay state matches
-    if relay_state and relay_state != state.flow_id:
-        flash("RelayState mismatch", "error")
+        # Verify relay state matches if present
+        if relay_state and relay_state != state.flow_id:
+            flash("RelayState mismatch", "error")
+            return redirect(url_for("saml.index"))
+
+        db = get_database()
+        db_session = db.get_session()
+
+        try:
+            idp = db_session.query(IdPProvider).get(state.idp_id)
+            if not idp:
+                flash("IdP not found", "error")
+                return redirect(url_for("saml.index"))
+
+            base_url = get_base_url()
+            flow = SPInitiatedFlow(idp, db, base_url=base_url)
+
+            # Process the response
+            state = flow.process_response(state, saml_response)
+
+            # Record the result
+            result_id = flow.record_result(state)
+
+            # Get the flow result for display
+            result = flow.get_flow_result(state)
+
+            # Clear the flow state
+            session.pop(FLOW_STATE_KEY, None)
+
+            return render_template(
+                "saml/result.html",
+                idp=idp,
+                state=state,
+                result=result,
+                result_id=result_id,
+                flow_type="sp_initiated",
+            )
+        finally:
+            db_session.close()
+    else:
+        # IdP-Initiated flow - unsolicited assertion
+        return handle_idp_initiated_acs(saml_response)
+
+
+def handle_idp_initiated_acs(saml_response: str) -> str | WerkzeugResponse:
+    """Handle IdP-Initiated SSO (unsolicited assertion).
+
+    Args:
+        saml_response: Base64-encoded SAML Response from IdP.
+
+    Returns:
+        Rendered result page or redirect on error.
+    """
+    from authtest.core.saml.sp import SAMLResponse
+
+    # First, parse the response to identify the IdP
+    parsed = SAMLResponse.parse(saml_response)
+
+    if not parsed.issuer:
+        flash("Could not determine IdP from SAML Response (missing Issuer)", "error")
         return redirect(url_for("saml.index"))
 
     db = get_database()
     db_session = db.get_session()
 
     try:
-        idp = db_session.query(IdPProvider).get(state.idp_id)
+        # Find IdP by entity_id
+        idp = (
+            db_session.query(IdPProvider)
+            .filter(IdPProvider.entity_id == parsed.issuer)
+            .filter(IdPProvider.idp_type == IdPType.SAML)
+            .filter(IdPProvider.enabled.is_(True))
+            .first()
+        )
+
         if not idp:
-            flash("IdP not found", "error")
+            flash(
+                f"Unknown Identity Provider: {parsed.issuer}. "
+                "Please configure this IdP first.",
+                "error",
+            )
             return redirect(url_for("saml.index"))
 
         base_url = get_base_url()
-        flow = SPInitiatedFlow(idp, db, base_url=base_url)
+        flow = IdPInitiatedFlow(idp, db, base_url=base_url)
 
-        # Process the response
-        state = flow.process_response(state, saml_response)
+        # Process the unsolicited response
+        state = flow.process_unsolicited_response(saml_response)
 
         # Record the result
         result_id = flow.record_result(state)
@@ -195,15 +266,51 @@ def acs() -> str | WerkzeugResponse:
         # Get the flow result for display
         result = flow.get_flow_result(state)
 
-        # Clear the flow state
-        session.pop(FLOW_STATE_KEY, None)
-
         return render_template(
             "saml/result.html",
             idp=idp,
             state=state,
             result=result,
             result_id=result_id,
+            flow_type="idp_initiated",
+        )
+    finally:
+        db_session.close()
+
+
+@saml_bp.route("/idp-initiated")
+def idp_initiated() -> str | WerkzeugResponse:
+    """IdP-Initiated SSO information page."""
+    idp_id = request.args.get("idp_id", type=int)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        if idp_id:
+            idp = db_session.query(IdPProvider).get(idp_id)
+            if not idp or idp.idp_type != IdPType.SAML:
+                flash("Invalid IdP selected", "error")
+                return redirect(url_for("saml.index"))
+        else:
+            idp = None
+
+        # Get all SAML IdPs for selection
+        idps = (
+            db_session.query(IdPProvider)
+            .filter(IdPProvider.idp_type == IdPType.SAML)
+            .filter(IdPProvider.enabled.is_(True))
+            .all()
+        )
+
+        base_url = get_base_url()
+        acs_url = f"{base_url}/saml/acs"
+
+        return render_template(
+            "saml/idp_initiated.html",
+            idp=idp,
+            idps=idps,
+            acs_url=acs_url,
         )
     finally:
         db_session.close()

@@ -11,6 +11,23 @@ after each iteration and it's included in prompts for context.
 - **Flow State Pattern**: Multi-step authentication flows store state in Flask session as dicts via `to_dict()`/`from_dict()`.
 - **Use `datetime.UTC`**: Import `UTC` from datetime (not `timezone.utc`) per ruff UP017 preference.
 
+- **IdP-Initiated Flow Pattern**: For unsolicited assertions, identify the IdP by parsing the Issuer from the SAML Response and looking it up by `entity_id` in the database.
+
+---
+
+## 2026-02-05 - US-008
+- **What was implemented**: SAML IdP-Initiated SSO flow for receiving and processing unsolicited assertions from IdPs.
+- **Files changed**:
+  - `authtest/core/saml/flows.py` - Added `IdPInitiatedFlow` class and renamed `SPInitiatedFlowResult` to generic `FlowResult`
+  - `authtest/web/routes/saml.py` - Updated ACS endpoint to handle both SP-Initiated and IdP-Initiated flows, added `/idp-initiated` route
+  - `authtest/web/templates/saml/idp_initiated.html` - New template with IdP configuration instructions
+  - `authtest/web/templates/saml/index.html` - Enabled IdP-Initiated SSO section (was "Coming Soon")
+  - `authtest/web/templates/saml/result.html` - Added flow_type awareness for proper labeling
+- **Learnings:**
+  - IdP-Initiated flows have no session state since there's no prior AuthnRequest
+  - Must identify IdP from the Issuer element in the SAML Response
+  - InResponseTo should NOT be present in IdP-Initiated responses (it's a validation check)
+  - Can reuse most of the SAMLServiceProvider code; main difference is flow orchestration
 ---
 
 ## 2026-02-05 - US-007

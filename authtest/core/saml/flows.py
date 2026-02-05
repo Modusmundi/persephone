@@ -168,13 +168,17 @@ def _response_to_dict(response: SAMLResponse) -> dict[str, Any]:
 
 
 @dataclass
-class SPInitiatedFlowResult:
-    """Result of an SP-Initiated SSO test."""
+class FlowResult:
+    """Result of a SAML SSO test."""
 
     flow_state: FlowState
     outcome: TestOutcome
     duration_ms: int | None = None
     summary: str = ""
+
+
+# Alias for backwards compatibility
+SPInitiatedFlowResult = FlowResult
 
 
 class SPInitiatedFlow:
@@ -411,7 +415,169 @@ class SPInitiatedFlow:
             outcome = TestOutcome.ERROR
             summary = state.error or f"Flow ended in unexpected state: {state.status}"
 
-        return SPInitiatedFlowResult(
+        return FlowResult(
+            flow_state=state,
+            outcome=outcome,
+            duration_ms=duration_ms,
+            summary=summary,
+        )
+
+
+class IdPInitiatedFlow:
+    """Orchestrates the IdP-Initiated SSO flow.
+
+    In IdP-Initiated SSO, the IdP sends an unsolicited SAML Response
+    to the SP's ACS endpoint without a prior AuthnRequest. This flow:
+    1. Receives SAML Response at ACS
+    2. Validates assertion format and signatures
+    3. Extracts user identity and attributes
+    4. Records test result
+    """
+
+    def __init__(
+        self,
+        idp: IdPProvider,
+        db: Database,
+        base_url: str = "https://localhost:8443",
+    ) -> None:
+        """Initialize the flow handler.
+
+        Args:
+            idp: Identity Provider configuration.
+            db: Database instance for recording results.
+            base_url: Base URL of this application.
+        """
+        self.idp = idp
+        self.db = db
+        self.base_url = base_url
+        self.sp = SAMLServiceProvider(idp, base_url=base_url)
+
+    def process_unsolicited_response(self, saml_response: str) -> FlowState:
+        """Process an unsolicited SAML Response from the IdP.
+
+        Args:
+            saml_response: Base64-encoded SAML Response from POST.
+
+        Returns:
+            FlowState with response data and validation results.
+        """
+        flow_id = f"idp_flow_{secrets.token_hex(16)}"
+        started_at = datetime.now(UTC)
+
+        state = FlowState(
+            flow_id=flow_id,
+            idp_id=self.idp.id,
+            idp_name=self.idp.name,
+            status=FlowStatus.WAITING_RESPONSE,
+            started_at=started_at,
+            options={"flow_type": "idp_initiated"},
+        )
+
+        try:
+            response = self.sp.process_response(saml_response)
+            state.response = response
+            state.completed_at = datetime.now(UTC)
+
+            # For IdP-initiated, InResponseTo should be empty or not present
+            if response.in_response_to:
+                response.validation_errors.append(
+                    f"IdP-Initiated response should not have InResponseTo attribute, "
+                    f"but found: {response.in_response_to}"
+                )
+
+            if response.is_success and not response.validation_errors:
+                state.status = FlowStatus.COMPLETED
+            else:
+                state.status = FlowStatus.FAILED
+                state.error = "; ".join(response.validation_errors) or "Authentication failed"
+
+        except Exception as e:
+            state.completed_at = datetime.now(UTC)
+            state.status = FlowStatus.FAILED
+            state.error = f"Error processing response: {e}"
+
+        return state
+
+    def record_result(self, state: FlowState) -> int:
+        """Record the test result to the database.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            ID of the created TestResult record.
+        """
+        from authtest.storage.models import TestResult
+
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        if state.status == FlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+        elif state.status == FlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+        else:
+            outcome = TestOutcome.ERROR
+
+        response_data = None
+        if state.response:
+            response_data = _response_to_dict(state.response)
+            response_data["raw_xml"] = state.response.raw_xml
+
+        result = TestResult(
+            idp_provider_id=state.idp_id,
+            test_name="IdP-Initiated SSO",
+            test_type="saml",
+            status=outcome.value,
+            error_message=state.error,
+            started_at=state.started_at or datetime.now(UTC),
+            completed_at=state.completed_at,
+            duration_ms=duration_ms,
+            request_data={"flow_type": "idp_initiated"},
+            response_data=response_data,
+        )
+
+        session = self.db.get_session()
+        try:
+            session.add(result)
+            session.commit()
+            result_id = result.id
+        finally:
+            session.close()
+
+        return result_id
+
+    def get_flow_result(self, state: FlowState) -> FlowResult:
+        """Get the final result of the flow.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            FlowResult with outcome summary.
+        """
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        if state.status == FlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+            summary = "IdP-Initiated SSO successful"
+            if state.response and state.response.assertions:
+                assertion = state.response.assertions[0]
+                if assertion.subject_name_id:
+                    summary = f"Authenticated as: {assertion.subject_name_id}"
+        elif state.status == FlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+            summary = state.error or "Authentication failed"
+        else:
+            outcome = TestOutcome.ERROR
+            summary = state.error or f"Flow ended in unexpected state: {state.status}"
+
+        return FlowResult(
             flow_state=state,
             outcome=outcome,
             duration_ms=duration_ms,

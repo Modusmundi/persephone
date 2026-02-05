@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}IdP-Initiated SSO - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">IdP-Initiated SSO Test</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Test Identity Provider initiated Single Sign-On with unsolicited assertions.
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="mb-6">
+        {% for category, message in messages %}
+        <div class="p-4 rounded-lg mb-2 {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% elif category == 'info' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200{% else %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- IdP Selection -->
+    {% if not idp %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Select Identity Provider</h2>
+        </div>
+        <div class="p-6">
+            {% if idps %}
+            <form action="{{ url_for('saml.idp_initiated') }}" method="GET">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2" for="idp_id">Identity Provider</label>
+                    <select
+                        name="idp_id"
+                        id="idp_id"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                    >
+                        <option value="">-- Select an IdP --</option>
+                        {% for provider in idps %}
+                        <option value="{{ provider.id }}">{{ provider.display_name or provider.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button
+                    type="submit"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+                >
+                    Continue
+                </button>
+            </form>
+            {% else %}
+            <div class="p-4 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200 rounded-lg">
+                <p class="font-semibold">No SAML Identity Providers configured</p>
+                <p class="text-sm mt-1">
+                    Add a SAML IdP using the CLI: <code class="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">authtest config idp add --type saml</code>
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+
+    <!-- IdP Information -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Testing IdP: {{ idp.display_name or idp.name }}</h2>
+        </div>
+        <div class="p-6">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Entity ID</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.entity_id or 'Not configured' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">SSO URL</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.sso_url or 'Not configured' }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- How It Works -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">How IdP-Initiated SSO Works</h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-4 text-sm text-gray-600 dark:text-gray-400">
+                <p>
+                    In IdP-Initiated SSO, the authentication flow starts at the Identity Provider (IdP)
+                    rather than at the Service Provider (SP). The IdP sends an <strong>unsolicited SAML Response</strong>
+                    to the SP without a prior AuthnRequest.
+                </p>
+
+                <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+                    <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-2">Flow Steps:</h3>
+                    <ol class="list-decimal list-inside space-y-1">
+                        <li>User logs into the IdP portal</li>
+                        <li>User clicks on the application link in the IdP</li>
+                        <li>IdP generates a SAML Response (without InResponseTo)</li>
+                        <li>IdP POSTs the SAML Response to the SP's ACS URL</li>
+                        <li>SP validates the assertion and authenticates the user</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACS Configuration -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Configure Your IdP</h2>
+        </div>
+        <div class="p-6">
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Configure your Identity Provider to send unsolicited SAML Responses to this application.
+                Use the following ACS URL in your IdP configuration:
+            </p>
+
+            <div class="bg-gray-100 dark:bg-gray-900 rounded-lg p-4 mb-4">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Assertion Consumer Service (ACS) URL:</p>
+                <code class="text-sm font-mono text-blue-600 dark:text-blue-400 break-all">{{ acs_url }}</code>
+            </div>
+
+            <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
+                <h3 class="font-semibold text-blue-800 dark:text-blue-300 text-sm mb-2">Important Requirements:</h3>
+                <ul class="text-sm text-blue-700 dark:text-blue-300 list-disc list-inside space-y-1">
+                    <li>The IdP's Entity ID must match: <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded text-xs">{{ idp.entity_id or 'Configure entity_id for IdP' }}</code></li>
+                    <li>The SAML Response must be POST'ed to the ACS URL</li>
+                    <li>The response should NOT include an InResponseTo attribute</li>
+                    <li>The Issuer in the response must match the configured IdP Entity ID</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Waiting for Response -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Ready to Receive</h2>
+        </div>
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-blue-600 dark:text-blue-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path>
+                </svg>
+            </div>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                This application is ready to receive IdP-Initiated SSO requests.
+            </p>
+            <p class="text-sm text-gray-500 dark:text-gray-500">
+                Initiate SSO from your Identity Provider to test the flow.
+                The results will be displayed here automatically.
+            </p>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex space-x-4">
+        <a
+            href="{{ url_for('saml.idp_initiated') }}"
+            class="flex-1 text-center bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Change IdP
+        </a>
+        <a
+            href="{{ url_for('saml.index') }}"
+            class="flex-1 text-center bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Back to SAML Tests
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
