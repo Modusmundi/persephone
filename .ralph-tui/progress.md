@@ -20,6 +20,11 @@ after each iteration and it's included in prompts for context.
 - Use `AUTH_ENABLED=False` in test fixtures to bypass authentication
 - Tests should run without database encryption key configured
 
+### SQLCipher Database Connection
+- pysqlcipher dialect expects passphrase in URL: `sqlite+pysqlcipher://:passphrase@/path`
+- Set AUTHTEST_DB_KEY env var for direct key access, AUTHTEST_DB_KEY_FILE for file-based
+- Additional cipher options (kdf_iter, cipher_page_size) set via event listener
+
 ---
 
 ## 2026-02-05 - US-005
@@ -47,5 +52,25 @@ after each iteration and it's included in prompts for context.
   - before_request hooks are ideal for global auth middleware
   - Use cast() to satisfy mypy for config values from current_app.config
   - Session tokens should be stored hashed to prevent compromise if DB is leaked
+---
+
+## 2026-02-05 - US-006
+- What was implemented:
+  - Click-based CLI entry point (already existed, enhanced)
+  - `config init` command to initialize database with encryption key generation
+  - `config idp add/edit/remove/list/show` commands for Identity Provider management
+  - `config export/import` for configuration portability with JSON format
+  - JSON output mode (`--json` flag) on all config commands for scripting
+  - Interactive (`-i/--interactive`) and non-interactive modes for idp add
+  - Comprehensive test suite for all CLI config commands (31 tests)
+- Files changed:
+  - `authtest/cli/config.py` - Complete rewrite with full IdP CRUD, export/import, JSON mode
+  - `authtest/storage/database.py` - Fixed pysqlcipher connection to include key in URL
+  - `tests/test_cli.py` - Added comprehensive CLI test suite with isolated database fixtures
+- **Learnings:**
+  - pysqlcipher dialect requires passphrase in connection URL format `:passphrase@`
+  - Use `NoReturn` type hint for error functions that always raise or sys.exit
+  - Click's CliRunner with isolated filesystem helps test CLI commands with temp databases
+  - Set env vars for DB_PATH and DB_KEY to isolate test databases from real config
 ---
 

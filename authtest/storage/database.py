@@ -119,16 +119,15 @@ def get_database_path() -> Path:
     return DEFAULT_DB_PATH
 
 
-def _configure_sqlcipher(dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry) -> None:
-    """Configure SQLCipher connection with encryption key.
+def _configure_sqlcipher_options(dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry) -> None:
+    """Configure additional SQLCipher options after connection.
 
     This is called by SQLAlchemy's event system for each new connection.
+    The encryption key is already set via the connection URL passphrase.
+    This sets additional cipher configuration options.
     """
-    key = get_encryption_key()
     cursor = dbapi_connection.cursor()
-    # PRAGMA key must be the first statement after opening the database
-    cursor.execute(f"PRAGMA key = \"x'{key}'\"")
-    # Use AES-256 encryption (SQLCipher default, but explicit is better)
+    # Use AES-256 encryption with strong KDF settings
     cursor.execute("PRAGMA cipher_page_size = 4096")
     cursor.execute("PRAGMA kdf_iter = 256000")
     cursor.execute("PRAGMA cipher_hmac_algorithm = HMAC_SHA512")
@@ -152,8 +151,14 @@ def create_database_engine(db_path: Path | None = None, echo: bool = False) -> E
     # Ensure parent directory exists
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Use sqlcipher3 module as the driver
-    connection_string = f"sqlite+pysqlcipher:///{db_path}"
+    # Get encryption key and include in connection URL
+    # pysqlcipher dialect expects format: sqlite+pysqlcipher://:passphrase@/path
+    key = get_encryption_key()
+
+    # Use sqlcipher3 module as the driver with key in URL
+    # The key is passed as hex via PRAGMA key = "x'...'" in _configure_sqlcipher
+    # But pysqlcipher also needs a passphrase in URL to avoid empty key error
+    connection_string = f"sqlite+pysqlcipher://:{key}@/{db_path}"
 
     engine = create_engine(
         connection_string,
@@ -161,8 +166,8 @@ def create_database_engine(db_path: Path | None = None, echo: bool = False) -> E
         pool_pre_ping=True,
     )
 
-    # Register event listener to configure encryption on each connection
-    event.listen(engine, "connect", _configure_sqlcipher)
+    # Register event listener to configure additional SQLCipher options
+    event.listen(engine, "connect", _configure_sqlcipher_options)
 
     return engine
 
