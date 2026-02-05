@@ -6,6 +6,7 @@ from authtest import __version__
 from authtest.cli import certs as certs_commands
 from authtest.cli import config as config_commands
 from authtest.cli import db as db_commands
+from authtest.cli import serve as serve_commands
 from authtest.cli import test as test_commands
 
 
@@ -86,3 +87,4 @@ cli.add_command(config_commands.config)
 cli.add_command(db_commands.db)
 cli.add_command(test_commands.test)
 cli.add_command(certs_commands.certs)
+cli.add_command(serve_commands.serve)

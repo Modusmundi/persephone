@@ -119,3 +119,33 @@ Database uses SQLCipher via `sqlcipher3` package with SQLAlchemy 2.x. Key patter
   - Click's `path_type=Path` has mypy incompatibility - use `# type: ignore[type-var]`
   - `raise ... from None` is better than `raise ... from e` for user-facing exceptions to hide traceback
 ---
+
+## 2026-02-05 - US-004
+- What was implemented:
+  - Self-signed TLS certificate generation using cryptography library
+  - PKCS#12 (.p12, .pfx) and PEM certificate loading support
+  - Certificate inspection and validation utilities
+  - TLS configuration via config.yaml or environment variables
+  - Auto-generation of self-signed certificates on first server run
+  - Flask HTTPS server support with ssl_context
+  - CLI commands: certs generate, import, list, inspect, status
+  - serve command with TLS support (--cert, --key, --no-tls options)
+
+- Files changed/created:
+  - `authtest/core/crypto/certs.py` - Certificate generation, loading, validation utilities
+  - `authtest/core/crypto/__init__.py` - Module exports for crypto functions
+  - `authtest/core/config.py` - TLSSettings, ServerSettings, AppConfig dataclasses with YAML/env support
+  - `authtest/app.py` - Added create_ssl_context() and run_server() with TLS support
+  - `authtest/cli/certs.py` - Full implementation of certs commands
+  - `authtest/cli/serve.py` - Server command with TLS options
+  - `authtest/cli/main.py` - Registered serve command
+
+- **Learnings:**
+  - Use `datetime.UTC` alias instead of `timezone.utc` (Python 3.11+ / ruff UP017)
+  - Cryptography library's x509.CertificateBuilder() needs `.sign()` called last
+  - Subject Alternative Names (SANs) should include localhost + 127.0.0.1 + ::1 for dev certs
+  - Private key files should have 0600 permissions for security
+  - PKCS#12 loading returns (key, cert, chain) tuple where chain may be None
+  - Flask's ssl_context can be an ssl.SSLContext or tuple of (cert_path, key_path)
+  - Use dataclasses with from_dict()/to_dict() methods for config objects with YAML serialization
+---
