@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  authtest:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8443:8443"
+    volumes:
+      - authtest-data:/home/authtest/.authtest
+      - ./certs:/app/certs:ro
+    environment:
+      - APP_DB_KEY=${APP_DB_KEY:-}
+      - FLASK_ENV=${FLASK_ENV:-production}
+    restart: unless-stopped
+
+volumes:
+  authtest-data:

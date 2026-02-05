@@ -1,0 +1,169 @@
+[project]
+name = "authtest"
+version = "0.1.0"
+description = "SAML/OIDC Authentication Flow Testing Application"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "AuthTest Team" }
+]
+keywords = ["saml", "oidc", "authentication", "security", "testing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP",
+]
+
+dependencies = [
+    # Web Framework
+    "flask>=3.0.0",
+    "jinja2>=3.1.0",
+
+    # CLI
+    "click>=8.1.0",
+
+    # SAML
+    "python3-saml>=1.16.0",
+
+    # OIDC/OAuth
+    "authlib>=1.3.0",
+
+    # Database
+    "sqlalchemy>=2.0.0",
+    # Note: sqlcipher3 requires system-level SQLCipher installation
+    # "sqlcipher3>=0.5.0",
+
+    # HTTP Client
+    "httpx>=0.27.0",
+
+    # JWT and Cryptography
+    "pyjwt>=2.8.0",
+    "cryptography>=42.0.0",
+
+    # PDF Reports
+    "weasyprint>=62.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+
+    # Type checking
+    "mypy>=1.8.0",
+    "types-pyyaml>=6.0.0",
+    "types-flask>=1.1.0",
+
+    # Linting and formatting
+    "ruff>=0.2.0",
+
+    # Pre-commit hooks
+    "pre-commit>=3.6.0",
+]
+
+[project.scripts]
+authtest = "authtest.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/authtest/authtest"
+Documentation = "https://authtest.readthedocs.io"
+Repository = "https://github.com/authtest/authtest"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["authtest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "-ra",
+    "-q",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+exclude = [
+    "tests/",
+    "build/",
+    "dist/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "onelogin.*",
+    "weasyprint.*",
+    "authlib.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["authtest"]
+
+[tool.coverage.run]
+source = ["authtest"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

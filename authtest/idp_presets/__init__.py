@@ -1,0 +1,1 @@
+"""Identity Provider preset configurations."""

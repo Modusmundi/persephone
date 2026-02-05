@@ -1,0 +1,1 @@
+"""Keycloak IdP preset configuration."""

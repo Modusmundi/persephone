@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AuthTest{% endblock %}</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="flex min-h-screen">
+        <!-- Sidebar -->
+        <nav class="w-64 bg-white dark:bg-gray-800 shadow-lg">
+            <div class="p-4">
+                <h1 class="text-xl font-bold">AuthTest</h1>
+            </div>
+            <ul class="mt-4">
+                <li class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <a href="/">Dashboard</a>
+                </li>
+                <li class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <a href="/saml">SAML Tests</a>
+                </li>
+                <li class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <a href="/oidc">OIDC Tests</a>
+                </li>
+                <li class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <a href="/config">Configuration</a>
+                </li>
+                <li class="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <a href="/history">History</a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-8">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>
