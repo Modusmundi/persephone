@@ -35,8 +35,10 @@ def init_app(app: Flask) -> None:
     from authtest.web.routes.certs import certs_bp
     from authtest.web.routes.oidc import oidc_bp
     from authtest.web.routes.saml import saml_bp
+    from authtest.web.routes.tools import tools_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(saml_bp)
     app.register_blueprint(oidc_bp)
     app.register_blueprint(certs_bp)
+    app.register_blueprint(tools_bp)

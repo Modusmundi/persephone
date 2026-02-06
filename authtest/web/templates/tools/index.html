@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Token Manipulation Tools - AuthTest{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold mb-2">Token Manipulation Tools</h1>
+<p class="text-gray-600 dark:text-gray-400 mb-6">
+    Tools for security testing - modify and re-sign authentication tokens
+</p>
+
+<!-- Warning Banner -->
+<div class="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-6">
+    <div class="flex items-start">
+        <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+        <div>
+            <h3 class="font-semibold text-yellow-800 dark:text-yellow-200">Security Testing Only</h3>
+            <p class="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                These tools are designed for authorized security testing and penetration testing engagements.
+                Manipulated tokens are clearly labeled and should never be used maliciously.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- JWT Tool Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-blue-500 to-blue-600 p-4">
+            <div class="flex items-center">
+                <div class="bg-white/20 rounded-lg p-3 mr-4">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">JWT Token Manipulation</h2>
+                    <p class="text-blue-100 text-sm">Modify and re-sign JWT tokens</p>
+                </div>
+            </div>
+        </div>
+        <div class="p-6">
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Test how applications handle manipulated JWT tokens including:
+            </p>
+            <ul class="space-y-2 mb-6 text-sm">
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Modify claims (sub, aud, iss, roles)
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Extend expiration time
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Strip signature (alg=none attack)
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Algorithm confusion (RS256 to HS256)
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Re-sign with custom key
+                </li>
+            </ul>
+            <a href="{{ url_for('tools.jwt_manipulator') }}" class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors">
+                Open JWT Tool
+            </a>
+        </div>
+    </div>
+
+    <!-- SAML Tool Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+        <div class="bg-gradient-to-r from-purple-500 to-purple-600 p-4">
+            <div class="flex items-center">
+                <div class="bg-white/20 rounded-lg p-3 mr-4">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">SAML Assertion Manipulation</h2>
+                    <p class="text-purple-100 text-sm">Modify and re-sign SAML assertions</p>
+                </div>
+            </div>
+        </div>
+        <div class="p-6">
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Test how applications handle manipulated SAML assertions including:
+            </p>
+            <ul class="space-y-2 mb-6 text-sm">
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Modify NameID (user identity)
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Change attributes and roles
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Extend validity conditions
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Strip XML signatures
+                </li>
+                <li class="flex items-center text-gray-700 dark:text-gray-300">
+                    <svg class="w-4 h-4 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    Modify issuer and audience
+                </li>
+            </ul>
+            <a href="{{ url_for('tools.saml_manipulator') }}" class="block w-full text-center bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-md transition-colors">
+                Open SAML Tool
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Use Cases Section -->
+<div class="mt-8">
+    <h2 class="text-xl font-bold mb-4">Common Security Test Cases</h2>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h3 class="font-semibold mb-2 text-gray-800 dark:text-gray-200">Signature Validation</h3>
+                <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <li>Does the app reject tokens with stripped signatures?</li>
+                    <li>Does it validate signatures against the correct key?</li>
+                    <li>Is it vulnerable to algorithm confusion attacks?</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-semibold mb-2 text-gray-800 dark:text-gray-200">Claim Validation</h3>
+                <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <li>Does the app validate issuer and audience?</li>
+                    <li>Are expiration times properly enforced?</li>
+                    <li>Can roles/permissions be escalated?</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-semibold mb-2 text-gray-800 dark:text-gray-200">Identity Impersonation</h3>
+                <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <li>Can user identity be changed in assertions?</li>
+                    <li>Does the app rely solely on token contents?</li>
+                    <li>Are session bindings validated?</li>
+                </ul>
+            </div>
+            <div>
+                <h3 class="font-semibold mb-2 text-gray-800 dark:text-gray-200">Authorization Bypass</h3>
+                <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                    <li>Can admin roles be added to tokens?</li>
+                    <li>Are custom claims properly validated?</li>
+                    <li>Can audience restrictions be bypassed?</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

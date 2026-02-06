@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Generated Signing Key - AuthTest{% endblock %}
+
+{% block content %}
+<style>
+    .pem-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 0.7rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+    }
+</style>
+
+<div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">Generated Signing Key</h1>
+            <p class="text-gray-600 dark:text-gray-400">Use this key to re-sign manipulated tokens</p>
+        </div>
+        <a href="{{ url_for('tools.index') }}" class="text-blue-500 hover:text-blue-600">
+            &larr; Back to Tools
+        </a>
+    </div>
+
+    {% if error %}
+    <div class="bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-6">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if key_info %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="font-semibold">Key Information</h2>
+        </div>
+        <div class="p-4 space-y-4">
+            <dl class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Key ID</dt>
+                    <dd class="font-mono mt-1">{{ key_info.key_id }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Algorithm</dt>
+                    <dd class="font-mono mt-1">{{ key_info.algorithm }}</dd>
+                </div>
+            </dl>
+
+            <div>
+                <h3 class="font-medium text-sm mb-2">Public Key (JWK)</h3>
+                <pre class="pem-viewer">{{ key_info.jwk | tojson(indent=2) }}</pre>
+            </div>
+
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-medium text-sm">Public Key (PEM)</h3>
+                    <button onclick="copyToClipboard('public-key')" class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors">
+                        Copy
+                    </button>
+                </div>
+                <pre id="public-key" class="pem-viewer">{{ key_info.public_key_pem }}</pre>
+            </div>
+
+            <details>
+                <summary class="text-sm text-gray-500 cursor-pointer">Show Private Key (CAUTION)</summary>
+                <div class="mt-2">
+                    <div class="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded p-2 mb-2 text-xs text-red-700 dark:text-red-300">
+                        This private key is only stored in your session. Keep it secure.
+                    </div>
+                    <pre class="pem-viewer">{{ key_info.private_key_pem }}</pre>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <div class="flex space-x-4">
+        <a href="{{ url_for('tools.jwt_manipulator') }}" class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors">
+            Use with JWT Tool
+        </a>
+        <a href="{{ url_for('tools.saml_manipulator') }}" class="flex-1 text-center bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-md transition-colors">
+            Use with SAML Tool
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    const text = element.textContent || element.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 1500);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+    });
+}
+</script>
+{% endblock %}

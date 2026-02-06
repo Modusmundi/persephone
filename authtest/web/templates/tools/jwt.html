@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}JWT Token Manipulation - AuthTest{% endblock %}
+
+{% block content %}
+<style>
+    .json-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 0.75rem;
+        line-height: 1.5;
+    }
+    .dark .json-viewer {
+        background: #1e1e1e;
+    }
+</style>
+
+<div class="max-w-5xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold">JWT Token Manipulation</h1>
+            <p class="text-gray-600 dark:text-gray-400">Modify and re-sign JWT tokens for security testing</p>
+        </div>
+        <a href="{{ url_for('tools.index') }}" class="text-blue-500 hover:text-blue-600">
+            &larr; Back to Tools
+        </a>
+    </div>
+
+    <!-- Warning Banner -->
+    <div class="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-3 mb-6">
+        <div class="flex items-center text-sm">
+            <svg class="w-4 h-4 text-red-600 dark:text-red-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <span class="text-red-700 dark:text-red-300">
+                <strong>MANIPULATED TOKEN</strong> - For authorized security testing only. Manipulated tokens are clearly labeled.
+            </span>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-6">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <!-- Input Form -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="font-semibold">Input Token</h2>
+        </div>
+        <div class="p-4">
+            <form method="POST" id="jwt-form">
+                <div class="mb-4">
+                    <label for="token" class="block text-sm font-medium mb-2">JWT Token</label>
+                    <textarea
+                        id="token"
+                        name="token"
+                        rows="4"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 font-mono text-xs"
+                        placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    >{{ original_token }}</textarea>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">Quick Actions</label>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="submit" name="action" value="decode" class="px-3 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-sm transition-colors">
+                            Decode Only
+                        </button>
+                        <button type="submit" name="action" value="strip_signature" class="px-3 py-1.5 bg-red-100 dark:bg-red-900/50 hover:bg-red-200 dark:hover:bg-red-900 text-red-700 dark:text-red-300 rounded text-sm transition-colors">
+                            Strip Signature (alg=none)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Extend Expiration -->
+                <details class="mb-4 border border-gray-200 dark:border-gray-700 rounded-md">
+                    <summary class="px-4 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <span class="font-medium text-sm">Extend Expiration</span>
+                    </summary>
+                    <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label for="extend_hours" class="block text-sm mb-1">Hours to extend</label>
+                                <input type="number" id="extend_hours" name="extend_hours" value="24" min="1"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                            <div>
+                                <label for="sign_method_exp" class="block text-sm mb-1">Signature</label>
+                                <select id="sign_method_exp" name="sign_method"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                                    <option value="unsigned">Keep original (invalid)</option>
+                                    <option value="strip">Strip signature</option>
+                                    <option value="resign">Generate new key & sign</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="submit" name="action" value="extend_expiration" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors">
+                            Extend Expiration
+                        </button>
+                    </div>
+                </details>
+
+                <!-- Modify Claims -->
+                <details class="mb-4 border border-gray-200 dark:border-gray-700 rounded-md">
+                    <summary class="px-4 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <span class="font-medium text-sm">Modify Claims</span>
+                    </summary>
+                    <div class="p-4 border-t border-gray-200 dark:border-gray-700 space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="new_sub" class="block text-sm mb-1">New Subject (sub)</label>
+                                <input type="text" id="new_sub" name="new_sub" placeholder="admin@example.com"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                            <div>
+                                <label for="new_iss" class="block text-sm mb-1">New Issuer (iss)</label>
+                                <input type="text" id="new_iss" name="new_iss" placeholder="https://evil-idp.com"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                            <div>
+                                <label for="new_aud" class="block text-sm mb-1">New Audience (aud)</label>
+                                <input type="text" id="new_aud" name="new_aud" placeholder="target-client-id"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                            <div>
+                                <label for="add_role" class="block text-sm mb-1">Add Role</label>
+                                <input type="text" id="add_role" name="add_role" placeholder="admin"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="add_admin" name="add_admin" class="mr-2">
+                            <label for="add_admin" class="text-sm">Add admin=true claim</label>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="custom_claim_name" class="block text-sm mb-1">Custom Claim Name</label>
+                                <input type="text" id="custom_claim_name" name="custom_claim_name" placeholder="custom_claim"
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                            <div>
+                                <label for="custom_claim_value" class="block text-sm mb-1">Custom Claim Value (JSON supported)</label>
+                                <input type="text" id="custom_claim_value" name="custom_claim_value" placeholder='"value" or ["a","b"]'
+                                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="sign_method_claims" class="block text-sm mb-1">Signature Method</label>
+                            <select id="sign_method_claims" name="sign_method"
+                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-sm">
+                                <option value="unsigned">Keep original signature (invalid)</option>
+                                <option value="strip">Strip signature (alg=none)</option>
+                                <option value="resign">Generate new key & re-sign</option>
+                            </select>
+                        </div>
+                        <button type="submit" name="action" value="modify_claims" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors">
+                            Apply Modifications
+                        </button>
+                    </div>
+                </details>
+
+                <!-- Algorithm Confusion -->
+                <details class="mb-4 border border-gray-200 dark:border-gray-700 rounded-md">
+                    <summary class="px-4 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <span class="font-medium text-sm">Algorithm Confusion Attack</span>
+                    </summary>
+                    <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            Tests for CVE-2015-9235: If an app uses the public key to verify RS256 tokens,
+                            an attacker can change the algorithm to HS256 and sign with the public key as the HMAC secret.
+                        </p>
+                        <div class="mb-4">
+                            <label for="hmac_secret" class="block text-sm mb-1">HMAC Secret (paste public key or secret)</label>
+                            <textarea id="hmac_secret" name="hmac_secret" rows="3"
+                                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 font-mono text-xs"
+                                placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----">{{ signing_key.public_key_pem if signing_key else '' }}</textarea>
+                        </div>
+                        <button type="submit" name="action" value="algorithm_confusion" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors">
+                            Apply Algorithm Confusion
+                        </button>
+                    </div>
+                </details>
+            </form>
+        </div>
+    </div>
+
+    {% if decoded_token %}
+    <!-- Decoded Token -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="font-semibold">Decoded Token</h2>
+        </div>
+        <div class="p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <h3 class="font-medium text-sm mb-2">Header</h3>
+                    <pre class="json-viewer">{{ decoded_token.header | tojson(indent=2) }}</pre>
+                </div>
+                <div>
+                    <h3 class="font-medium text-sm mb-2">Signature</h3>
+                    <pre class="json-viewer break-all whitespace-pre-wrap">{{ decoded_token.signature }}</pre>
+                </div>
+            </div>
+            <div class="mt-4">
+                <h3 class="font-medium text-sm mb-2">Payload</h3>
+                <pre class="json-viewer">{{ decoded_token.payload | tojson(indent=2) }}</pre>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if result %}
+    <!-- Manipulation Result -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 border-2 border-yellow-400">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-yellow-50 dark:bg-yellow-900/30">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+                <h2 class="font-semibold text-yellow-800 dark:text-yellow-200">Manipulated Token Result</h2>
+            </div>
+        </div>
+        <div class="p-4">
+            <!-- Manipulations Applied -->
+            <div class="mb-4">
+                <h3 class="font-medium text-sm mb-2">Manipulations Applied</h3>
+                <div class="space-y-2">
+                    {% for m in result.manipulations %}
+                    <div class="flex items-start p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm">
+                        <span class="inline-block px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded text-xs mr-2">
+                            {{ m.type.value }}
+                        </span>
+                        <div>
+                            <span class="text-gray-700 dark:text-gray-300">{{ m.description }}</span>
+                            {% if m.original_value %}
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Original: <code class="bg-gray-200 dark:bg-gray-600 px-1 rounded">{{ m.original_value }}</code>
+                            </div>
+                            {% endif %}
+                            {% if m.new_value %}
+                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                New: <code class="bg-gray-200 dark:bg-gray-600 px-1 rounded">{{ m.new_value }}</code>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Signed With -->
+            {% if result.signed_with %}
+            <div class="mb-4">
+                <h3 class="font-medium text-sm mb-2">Signed With</h3>
+                <p class="text-sm text-gray-600 dark:text-gray-400">{{ result.signed_with }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Manipulated Token -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-medium text-sm">Manipulated Token</h3>
+                    <button onclick="copyToClipboard('manipulated-token')" class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors">
+                        Copy
+                    </button>
+                </div>
+                <pre id="manipulated-token" class="json-viewer whitespace-pre-wrap break-all">{{ result.manipulated_token }}</pre>
+            </div>
+
+            <!-- Modified Payload -->
+            <div>
+                <h3 class="font-medium text-sm mb-2">Modified Payload</h3>
+                <pre class="json-viewer">{{ result.payload | tojson(indent=2) }}</pre>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if signing_key %}
+    <!-- Generated Signing Key -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <details>
+            <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-semibold">Generated Signing Key</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+            </summary>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 space-y-4">
+                <div>
+                    <h3 class="font-medium text-sm mb-2">Public Key (JWK)</h3>
+                    <pre class="json-viewer">{{ signing_key.jwk | tojson(indent=2) }}</pre>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-medium text-sm">Public Key (PEM)</h3>
+                        <button onclick="copyToClipboard('public-key-pem')" class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors">
+                            Copy
+                        </button>
+                    </div>
+                    <pre id="public-key-pem" class="json-viewer whitespace-pre-wrap">{{ signing_key.public_key_pem }}</pre>
+                </div>
+                <details>
+                    <summary class="text-sm text-gray-500 cursor-pointer">Show Private Key (CAUTION)</summary>
+                    <div class="mt-2">
+                        <pre class="json-viewer whitespace-pre-wrap text-xs">{{ signing_key.private_key_pem }}</pre>
+                    </div>
+                </details>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    const text = element.textContent || element.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 1500);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+    });
+}
+</script>
+{% endblock %}

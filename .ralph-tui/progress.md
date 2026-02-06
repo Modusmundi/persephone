@@ -72,6 +72,17 @@ after each iteration and it's included in prompts for context.
 - ProtocolLog attached to flow state and included in test results for debugging
 - Config via LoggingSettings (level, trace_enabled, log_file) in config.yaml or env vars
 
+### Token Manipulation Pattern
+- JWT manipulation in `authtest/core/crypto/tokens.py` with JWTManipulator class
+- SAML manipulation in `authtest/core/saml/manipulation.py` with SAMLManipulator class
+- Builder pattern: manipulator.modify_claim().extend_expiration().sign_with_rsa_key()
+- ManipulatedToken/ManipulatedAssertion dataclasses track all manipulations applied
+- Each manipulation recorded with type, description, original_value, new_value
+- Signing options: strip_signature() (alg=none), sign_with_rsa_key(), sign_with_hs_secret() (algorithm confusion)
+- generate_signing_key_pair() creates RSA/EC keys with get_public_key_jwk() for export
+- SAML manipulation requires lxml for XML parsing, signxml for re-signing (optional)
+- Clear warning labels on all manipulated tokens for security testing attribution
+
 ---
 
 ## 2026-02-05 - US-011
@@ -338,5 +349,52 @@ after each iteration and it's included in prompts for context.
   - Header dict values don't include key prefix, so need separate patterns for "Bearer token" vs "Authorization: Bearer token"
   - ProtocolLog stores exchanges with start/complete timestamps; attached to flow state for result recording
   - IntEnum used for LogLevel to allow numeric comparisons (TRACE < DEBUG < INFO < ERROR)
+---
+
+## 2026-02-05 - US-022
+- **What was implemented**: Token manipulation tools for security testing (JWT and SAML)
+- **Files created**:
+  - `authtest/core/crypto/tokens.py` - JWT manipulation module with JWTManipulator class, ManipulatedToken dataclass, key generation utilities
+  - `authtest/core/saml/manipulation.py` - SAML assertion manipulation module with SAMLManipulator class, ManipulatedAssertion dataclass
+  - `authtest/web/routes/tools.py` - Web routes for token manipulation tools (/tools, /tools/jwt, /tools/saml, /tools/generate-key)
+  - `authtest/web/templates/tools/index.html` - Token tools landing page
+  - `authtest/web/templates/tools/jwt.html` - JWT manipulation UI
+  - `authtest/web/templates/tools/saml.html` - SAML manipulation UI
+  - `authtest/web/templates/tools/key_generated.html` - Generated key display page
+- **Files modified**:
+  - `authtest/core/crypto/__init__.py` - Added exports for token manipulation classes/functions
+  - `authtest/core/saml/__init__.py` - Added exports for SAML manipulation classes/functions
+  - `authtest/web/routes/__init__.py` - Registered tools_bp blueprint
+  - `authtest/web/templates/base.html` - Added Security Tools navigation section
+  - `authtest/web/templates/index.html` - Added Token Manipulation card to dashboard
+- **Features implemented**:
+  - JWT token decoding and inspection
+  - JWT claim modification (sub, iss, aud, roles, custom claims)
+  - JWT expiration extension
+  - JWT signature stripping (alg=none attack testing)
+  - JWT algorithm confusion attack (RS256 to HS256)
+  - JWT re-signing with generated RSA/EC keys
+  - SAML assertion parsing and attribute extraction
+  - SAML NameID modification
+  - SAML validity period extension
+  - SAML issuer/audience modification
+  - SAML attribute addition/modification
+  - SAML signature stripping
+  - Clear labeling of manipulated tokens ("MANIPULATED TOKEN - FOR SECURITY TESTING ONLY")
+  - JWK generation and export for re-signed tokens
+- **Acceptance Criteria Met**:
+  - [x] Modify SAML assertions and re-sign
+  - [x] Modify JWT tokens and re-sign
+  - [x] Use application's own key for re-signing (generated key with JWK export)
+  - [x] Clear labeling of manipulated tokens
+- **Learnings:**
+  - PyJWT library handles JWT signing/encoding with various algorithms (RS256, ES256, HS256)
+  - signxml library provides XMLSigner for SAML re-signing (optional dependency)
+  - lxml etree is essential for SAML XML manipulation with namespaces
+  - Base64url encoding for JWTs requires padding handling (4 - len % 4)
+  - JWK format requires base64url encoding of RSA modulus (n) and exponent (e)
+  - SAML namespaces: saml=urn:oasis:names:tc:SAML:2.0:assertion, samlp=urn:oasis:names:tc:SAML:2.0:protocol
+  - Token manipulation tools need prominent security warnings for authorized testing use
+  - Flask session can store generated keys for use across manipulation operations
 ---
 

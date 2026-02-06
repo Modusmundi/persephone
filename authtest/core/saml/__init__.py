@@ -34,6 +34,14 @@ from authtest.core.saml.sp import (
     SAMLResponse,
     SAMLServiceProvider,
 )
+from authtest.core.saml.manipulation import (
+    ManipulatedAssertion,
+    SAMLManipulation,
+    SAMLManipulationType,
+    SAMLManipulator,
+    get_nameid_from_assertion,
+    parse_saml_attributes,
+)
 
 __all__ = [
     # Artifact binding
@@ -51,6 +59,13 @@ __all__ = [
     "SAMLLogoutResponse",
     "get_logout_status_description",
     "validate_logout_response",
+    # Manipulation
+    "ManipulatedAssertion",
+    "SAMLManipulation",
+    "SAMLManipulationType",
+    "SAMLManipulator",
+    "get_nameid_from_assertion",
+    "parse_saml_attributes",
     # SP
     "BINDING_HTTP_ARTIFACT",
     "BINDING_HTTP_POST",

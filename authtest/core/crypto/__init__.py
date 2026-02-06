@@ -30,6 +30,18 @@ from authtest.core.crypto.certs import (
     save_certificate,
     save_private_key,
 )
+from authtest.core.crypto.tokens import (
+    JWTManipulator,
+    ManipulatedToken,
+    ManipulationType,
+    TokenManipulation,
+    create_jwt_from_scratch,
+    decode_jwt_parts,
+    generate_signing_key_pair,
+    get_private_key_pem as get_signing_key_pem,
+    get_public_key_jwk,
+    get_public_key_pem,
+)
 
 __all__ = [
     # Constants
@@ -47,7 +59,7 @@ __all__ = [
     # Data classes
     "CertificateInfo",
     "TLSConfig",
-    # Functions
+    # Certificate functions
     "compute_certificate_fingerprint",
     "ensure_tls_certificate",
     "generate_private_key",
@@ -64,4 +76,16 @@ __all__ = [
     "load_private_key",
     "save_certificate",
     "save_private_key",
+    # Token manipulation classes
+    "JWTManipulator",
+    "ManipulatedToken",
+    "ManipulationType",
+    "TokenManipulation",
+    # Token manipulation functions
+    "create_jwt_from_scratch",
+    "decode_jwt_parts",
+    "generate_signing_key_pair",
+    "get_signing_key_pem",
+    "get_public_key_jwk",
+    "get_public_key_pem",
 ]
