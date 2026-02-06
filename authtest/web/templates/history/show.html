@@ -251,8 +251,11 @@
     </div>
     {% endif %}
 
-    <!-- Export Single Result -->
+    <!-- Export and Compare Actions -->
     <div class="flex flex-wrap justify-end gap-2">
+        <a href="{{ url_for('compare.baseline', baseline=result.id) }}" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-sm">
+            Compare as Baseline
+        </a>
         <form method="POST" action="{{ url_for('history.export') }}">
             <input type="hidden" name="selected_ids" value="{{ result.id }}">
             <input type="hidden" name="format" value="json">

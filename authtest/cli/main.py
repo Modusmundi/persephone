@@ -4,6 +4,7 @@ import click
 
 from authtest import __version__
 from authtest.cli import certs as certs_commands
+from authtest.cli import compare as compare_commands
 from authtest.cli import config as config_commands
 from authtest.cli import db as db_commands
 from authtest.cli import history as history_commands
@@ -90,3 +91,4 @@ cli.add_command(test_commands.test)
 cli.add_command(certs_commands.certs)
 cli.add_command(serve_commands.serve)
 cli.add_command(history_commands.history)
+cli.add_command(compare_commands.compare)

@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Baseline Comparison Results - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-6">
+        <div>
+            <a href="{{ url_for('compare.baseline') }}" class="text-blue-500 hover:text-blue-600 text-sm mb-2 inline-block">&larr; Change Baseline</a>
+            <h1 class="text-2xl font-bold">Baseline Comparison Results</h1>
+        </div>
+    </div>
+
+    <!-- Baseline Info -->
+    <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-6">
+        <div class="flex justify-between items-start">
+            <div>
+                <div class="text-xs text-blue-600 dark:text-blue-400 uppercase font-semibold mb-1">Baseline Test</div>
+                <div class="font-medium text-lg">#{{ baseline.id }} - {{ baseline.test_name }}</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <span class="px-2 py-0.5 text-xs rounded-full {% if baseline.status == 'passed' %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% elif baseline.status == 'failed' %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% else %}bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200{% endif %}">
+                        {{ baseline.status }}
+                    </span>
+                    <span class="ml-2">{{ baseline.test_type.upper() }}</span>
+                    <span class="ml-2">{{ baseline.started_at.strftime('%Y-%m-%d %H:%M') if baseline.started_at else 'N/A' }}</span>
+                </div>
+            </div>
+            <a href="{{ url_for('history.show', test_id=baseline.id) }}" class="text-blue-500 hover:text-blue-600 text-sm">
+                View Details
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+        <form action="{{ url_for('compare.baseline') }}" method="GET" class="flex flex-wrap items-end gap-4">
+            <input type="hidden" name="baseline" value="{{ baseline.id }}">
+
+            <div class="flex-1 min-w-32">
+                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">IdP</label>
+                <select name="idp" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 text-sm">
+                    <option value="">Same as baseline</option>
+                    {% for idp in idps %}
+                    <option value="{{ idp.name }}" {% if filters.idp == idp.name %}selected{% endif %}>{{ idp.display_name or idp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="w-28">
+                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                <select name="type" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 text-sm">
+                    <option value="">Same</option>
+                    <option value="saml" {% if filters.type == 'saml' %}selected{% endif %}>SAML</option>
+                    <option value="oidc" {% if filters.type == 'oidc' %}selected{% endif %}>OIDC</option>
+                </select>
+            </div>
+
+            <div class="w-28">
+                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Limit</label>
+                <select name="limit" class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600 text-sm">
+                    <option value="5" {% if filters.limit == 5 %}selected{% endif %}>5</option>
+                    <option value="10" {% if filters.limit == 10 %}selected{% endif %}>10</option>
+                    <option value="20" {% if filters.limit == 20 %}selected{% endif %}>20</option>
+                    <option value="50" {% if filters.limit == 50 %}selected{% endif %}>50</option>
+                </select>
+            </div>
+
+            <div class="flex items-center">
+                <label class="flex items-center text-sm">
+                    <input type="checkbox" name="regressions_only" value="true" {% if filters.regressions_only %}checked{% endif %} class="mr-2">
+                    Regressions only
+                </label>
+            </div>
+
+            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+                Apply
+            </button>
+        </form>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold">{{ comparisons|length }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Tests Compared</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ regression_count }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Regressions Found</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ comparisons|length - regression_count }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Tests OK</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                {{ comparisons | selectattr('status_changed') | list | length }}
+            </div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Status Changes</div>
+        </div>
+    </div>
+
+    <!-- Regression Alert -->
+    {% if regression_count > 0 %}
+    <div class="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg">
+        <div class="flex items-center">
+            <svg class="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="font-semibold text-red-800 dark:text-red-200">
+                {{ regression_count }} regression(s) detected across compared tests
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Comparison Results -->
+    {% if comparisons %}
+    <div class="space-y-4">
+        {% for comp in comparisons %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <div>
+                    <div class="flex items-center">
+                        <span class="font-medium">#{{ comp.comparison_id }} - {{ comp.comparison_name }}</span>
+                        {% if comp.has_regressions %}
+                        <span class="ml-2 px-2 py-0.5 text-xs rounded-full bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">REGRESSION</span>
+                        {% elif comp.status_changed %}
+                        <span class="ml-2 px-2 py-0.5 text-xs rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">STATUS CHANGED</span>
+                        {% else %}
+                        <span class="ml-2 px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">OK</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Status: {{ comp.comparison_status }} | {{ comp.comparison_timestamp or 'N/A' }}
+                    </div>
+                </div>
+                <a href="{{ url_for('compare.diff', baseline=baseline.id, comparison=comp.comparison_id) }}" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm">
+                    View Diff
+                </a>
+            </div>
+
+            <div class="px-6 py-4">
+                <!-- Summary Grid -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center text-sm">
+                    <div>
+                        <div class="text-lg font-semibold text-green-600 dark:text-green-400">+{{ comp.claims_added }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">Claims Added</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-semibold text-red-600 dark:text-red-400">-{{ comp.claims_removed }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">Claims Removed</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-semibold text-yellow-600 dark:text-yellow-400">~{{ comp.claims_modified }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">Claims Modified</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-semibold text-yellow-600 dark:text-yellow-400">~{{ comp.validations_changed }}</div>
+                        <div class="text-gray-500 dark:text-gray-400">Validations Changed</div>
+                    </div>
+                </div>
+
+                <!-- Regression Details -->
+                {% if comp.has_regressions %}
+                <div class="mt-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    <div class="text-sm font-medium text-red-800 dark:text-red-200 mb-1">Regressions:</div>
+                    <ul class="list-disc list-inside text-sm text-red-700 dark:text-red-300">
+                        {% for detail in comp.regression_details %}
+                        <li>{{ detail }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-8 text-center">
+        <p class="text-gray-500 dark:text-gray-400">No test results found for comparison with the selected filters.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

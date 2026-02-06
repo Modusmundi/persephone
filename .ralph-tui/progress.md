@@ -82,6 +82,16 @@ after each iteration and it's included in prompts for context.
 - Print-optimized with @media print rules (hide controls, expand all, avoid page breaks)
 - Flask Response with mimetype="text/html" and Content-Disposition for download
 
+### Test Comparison Pattern
+- Comparison module in `authtest/reports/compare.py` with compare_test_results() and compare_with_baseline()
+- ClaimDiff and ValidationDiff dataclasses track individual differences with DiffType enum (added/removed/modified/unchanged)
+- TestComparison dataclass aggregates all diffs with summary statistics and regression flags
+- Regression detection: status changes (passed→failed), validation failures (valid→invalid), critical claim removal
+- Critical claims for regression flagging: sub, iss, aud, exp, iat, email, name
+- CLI in `authtest/cli/compare.py` with diff (two tests), baseline (one-to-many), regressions (consecutive detection)
+- Web routes in `authtest/web/routes/compare.py` with compare_bp blueprint and API endpoints for dynamic comparison
+- Side-by-side diff UI with color-coded indicators (+added, -removed, ~modified)
+
 ---
 
 ### OIDC Discovery Pattern
@@ -603,5 +613,44 @@ after each iteration and it's included in prompts for context.
   - JavaScript toggleSection() pattern with classList.add/remove for custom expand/collapse
   - Use distinct variable names (html_metadata vs metadata) when mypy complains about type conflicts in if/else branches
   - Ruff tries to parse Jinja templates as Python - exclude .html files from ruff checks
+---
+
+## 2026-02-06 - US-025
+- **What was implemented**: Test comparison and diff tools for comparing test runs
+- **Files created**:
+  - `authtest/reports/compare.py` - Core comparison module with ClaimDiff, ValidationDiff, TestComparison dataclasses, compare_claims(), compare_validation_checks(), compare_test_results(), compare_with_baseline(), detect_regressions()
+  - `authtest/cli/compare.py` - CLI commands: diff, baseline, regressions with filters and JSON output
+  - `authtest/web/routes/compare.py` - Web routes with compare_bp blueprint, /diff, /baseline, /api/results, /api/diff endpoints
+  - `authtest/web/templates/compare/index.html` - Compare tools selection page
+  - `authtest/web/templates/compare/diff.html` - Side-by-side diff comparison view
+  - `authtest/web/templates/compare/baseline.html` - Baseline comparison results view
+  - `authtest/web/templates/compare/baseline_select.html` - Baseline selection form
+- **Files modified**:
+  - `authtest/reports/__init__.py` - Added comparison module exports
+  - `authtest/cli/main.py` - Registered compare commands
+  - `authtest/web/routes/__init__.py` - Registered compare_bp blueprint
+  - `authtest/web/templates/base.html` - Added Compare link to sidebar navigation
+  - `authtest/web/templates/history/show.html` - Added "Compare as Baseline" button
+- **Features implemented**:
+  - Side-by-side diff comparison between any two test results
+  - Claim-level diff: added, removed, modified, unchanged with color coding
+  - Validation check diff with status change detection
+  - Regression detection: status changes, validation failures, removed critical claims
+  - Baseline comparison mode: compare multiple tests against single baseline
+  - Filter support: by IdP, test type, limit, regressions-only
+  - CLI commands with --json output for scripting
+  - Web UI with visual diff display and navigation
+  - API endpoints for dynamic comparison
+- **Acceptance Criteria Met**:
+  - [x] Side-by-side diff comparison between test runs
+  - [x] Regression detection for claim changes
+  - [x] Baseline comparison mode
+  - [x] Highlight added/removed/modified claims
+- **Learnings:**
+  - Use distinct variable names in for loops (claim_diff vs val_diff) to avoid mypy type confusion
+  - DiffType enum with StrEnum for easy serialization to JSON
+  - TestComparison dataclass with to_dict()/from_dict() follows same pattern as other modules
+  - Regression detection is separate function for flexibility and testability
+  - Critical claims (sub, iss, aud, exp, iat, email, name) are flagged as regressions when removed
 ---
 

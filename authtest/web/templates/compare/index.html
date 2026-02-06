@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Test Results - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold">Compare Test Results</h1>
+        <p class="text-gray-500 dark:text-gray-400 mt-1">
+            Compare test runs to detect changes in IdP behavior, claim mappings, and validation results.
+        </p>
+    </div>
+
+    <!-- Comparison Mode Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <!-- Side-by-Side Diff -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-2">Side-by-Side Diff</h2>
+            <p class="text-gray-500 dark:text-gray-400 mb-4">
+                Compare two specific test results to see exactly what changed between them.
+            </p>
+            <form action="{{ url_for('compare.diff') }}" method="GET" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Baseline Test</label>
+                    <select name="baseline" required class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">
+                        <option value="">Select baseline...</option>
+                        {% for r in results %}
+                        <option value="{{ r.id }}">
+                            #{{ r.id }} - {{ r.test_name[:40] }} ({{ r.status }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Comparison Test</label>
+                    <select name="comparison" required class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-md border border-gray-300 dark:border-gray-600">
+                        <option value="">Select comparison...</option>
+                        {% for r in results %}
+                        <option value="{{ r.id }}">
+                            #{{ r.id }} - {{ r.test_name[:40] }} ({{ r.status }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" name="show_unchanged" value="true" id="show_unchanged" class="mr-2">
+                    <label for="show_unchanged" class="text-sm">Show unchanged claims and validations</label>
+                </div>
+                <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md">
+                    Compare Tests
+                </button>
+            </form>
+        </div>
+
+        <!-- Baseline Comparison -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-2">Baseline Comparison</h2>
+            <p class="text-gray-500 dark:text-gray-400 mb-4">
+                Compare multiple tests against a single baseline to detect regressions across runs.
+            </p>
+            <a href="{{ url_for('compare.baseline') }}" class="block w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md text-center">
+                Set Up Baseline
+            </a>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold mb-4">Quick Access from History</h2>
+        <p class="text-gray-500 dark:text-gray-400 mb-4">
+            You can also compare tests directly from the history view. Select two tests and click compare,
+            or use the "Compare with baseline" button on any test result.
+        </p>
+        <a href="{{ url_for('history.index') }}" class="inline-block bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md">
+            Go to History
+        </a>
+    </div>
+
+    <!-- Recent Results Table -->
+    {% if results %}
+    <div class="mt-8 bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Recent Test Results</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Test Name</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for r in results[:20] %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">{{ r.id }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm max-w-xs truncate">
+                            <a href="{{ url_for('history.show', test_id=r.id) }}" class="text-blue-500 hover:text-blue-600">
+                                {{ r.test_name }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs rounded-full {% if r.test_type == 'oidc' %}bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200{% else %}bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200{% endif %}">
+                                {{ r.test_type.upper() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 py-1 text-xs rounded-full {% if r.status == 'passed' %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% elif r.status == 'failed' %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% else %}bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200{% endif %}">
+                                {{ r.status }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                            {{ r.started_at.strftime('%Y-%m-%d %H:%M') if r.started_at else 'N/A' }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

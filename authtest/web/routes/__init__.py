@@ -33,6 +33,7 @@ def health() -> dict[str, str]:
 def init_app(app: Flask) -> None:
     """Register blueprints with the Flask app."""
     from authtest.web.routes.certs import certs_bp
+    from authtest.web.routes.compare import compare_bp
     from authtest.web.routes.config import config_bp
     from authtest.web.routes.history import history_bp
     from authtest.web.routes.oidc import oidc_bp
@@ -46,3 +47,4 @@ def init_app(app: Flask) -> None:
     app.register_blueprint(tools_bp)
     app.register_blueprint(history_bp)
     app.register_blueprint(config_bp)
+    app.register_blueprint(compare_bp)

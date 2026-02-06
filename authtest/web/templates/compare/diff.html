@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Test Comparison - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-6">
+        <div>
+            <a href="{{ url_for('compare.index') }}" class="text-blue-500 hover:text-blue-600 text-sm mb-2 inline-block">&larr; Back to Compare</a>
+            <h1 class="text-2xl font-bold">Side-by-Side Comparison</h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <a href="{{ url_for('compare.diff', baseline=baseline.id, comparison=comparison.id, show_unchanged='true' if not show_unchanged else 'false') }}"
+               class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm">
+                {% if show_unchanged %}Hide{% else %}Show{% endif %} Unchanged
+            </a>
+        </div>
+    </div>
+
+    <!-- Comparison Header Cards -->
+    <div class="grid grid-cols-2 gap-4 mb-6">
+        <!-- Baseline -->
+        <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+            <div class="text-xs text-blue-600 dark:text-blue-400 uppercase font-semibold mb-1">Baseline</div>
+            <div class="font-medium">#{{ baseline.id }} - {{ baseline.test_name }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <span class="px-2 py-0.5 text-xs rounded-full {% if baseline.status == 'passed' %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% elif baseline.status == 'failed' %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% else %}bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200{% endif %}">
+                    {{ baseline.status }}
+                </span>
+                <span class="ml-2">{{ baseline.started_at.strftime('%Y-%m-%d %H:%M') if baseline.started_at else 'N/A' }}</span>
+            </div>
+        </div>
+
+        <!-- Comparison -->
+        <div class="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+            <div class="text-xs text-purple-600 dark:text-purple-400 uppercase font-semibold mb-1">Comparison</div>
+            <div class="font-medium">#{{ comparison.id }} - {{ comparison.test_name }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                <span class="px-2 py-0.5 text-xs rounded-full {% if comparison.status == 'passed' %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% elif comparison.status == 'failed' %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% else %}bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200{% endif %}">
+                    {{ comparison.status }}
+                </span>
+                <span class="ml-2">{{ comparison.started_at.strftime('%Y-%m-%d %H:%M') if comparison.started_at else 'N/A' }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Change Banner -->
+    {% if diff.status_changed %}
+    <div class="mb-6 p-4 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg">
+        <div class="flex items-center">
+            <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <span class="font-medium text-yellow-800 dark:text-yellow-200">
+                Test status changed from "{{ diff.baseline_status }}" to "{{ diff.comparison_status }}"
+            </span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Regression Banner -->
+    {% if diff.has_regressions %}
+    <div class="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg">
+        <div class="flex items-center mb-2">
+            <svg class="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="font-semibold text-red-800 dark:text-red-200">Regressions Detected</span>
+        </div>
+        <ul class="list-disc list-inside text-sm text-red-700 dark:text-red-300 ml-7">
+            {% for detail in diff.regression_details %}
+            <li>{{ detail }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ diff.claims_added }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Claims Added</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ diff.claims_removed }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Claims Removed</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{{ diff.claims_modified }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Claims Modified</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+            <div class="text-2xl font-bold text-gray-600 dark:text-gray-400">{{ diff.claims_unchanged }}</div>
+            <div class="text-sm text-gray-500 dark:text-gray-400">Claims Unchanged</div>
+        </div>
+    </div>
+
+    <!-- Claims Diff -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Claims Comparison</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-12">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Claim</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider bg-blue-50 dark:bg-blue-900/20">Baseline Value</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider bg-purple-50 dark:bg-purple-900/20">Comparison Value</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for claim in diff.claim_diffs %}
+                    {% if show_unchanged or claim.diff_type != 'unchanged' %}
+                    <tr class="{% if claim.diff_type == 'added' %}bg-green-50 dark:bg-green-900/20{% elif claim.diff_type == 'removed' %}bg-red-50 dark:bg-red-900/20{% elif claim.diff_type == 'modified' %}bg-yellow-50 dark:bg-yellow-900/20{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if claim.diff_type == 'added' %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400 text-xs font-bold">+</span>
+                            {% elif claim.diff_type == 'removed' %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 text-xs font-bold">-</span>
+                            {% elif claim.diff_type == 'modified' %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-600 dark:text-yellow-400 text-xs font-bold">~</span>
+                            {% else %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs">=</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium">{{ claim.claim_name }}</td>
+                        <td class="px-6 py-4 bg-blue-50/50 dark:bg-blue-900/10">
+                            {% if claim.baseline_value is not none %}
+                            <code class="text-sm break-all">{{ claim.baseline_value | tojson if claim.baseline_value is mapping or claim.baseline_value is iterable and claim.baseline_value is not string else claim.baseline_value }}</code>
+                            {% else %}
+                            <span class="text-gray-400 italic">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 bg-purple-50/50 dark:bg-purple-900/10">
+                            {% if claim.comparison_value is not none %}
+                            <code class="text-sm break-all">{{ claim.comparison_value | tojson if claim.comparison_value is mapping or claim.comparison_value is iterable and claim.comparison_value is not string else claim.comparison_value }}</code>
+                            {% else %}
+                            <span class="text-gray-400 italic">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if not diff.claim_diffs %}
+        <div class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+            No claims to compare
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Validation Diff -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Validation Comparison</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Added: {{ diff.validations_added }} | Removed: {{ diff.validations_removed }} | Changed: {{ diff.validations_changed }} | Unchanged: {{ diff.validations_unchanged }}
+            </p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-12">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Check</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider bg-blue-50 dark:bg-blue-900/20">Baseline</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider bg-purple-50 dark:bg-purple-900/20">Comparison</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for val in diff.validation_diffs %}
+                    {% if show_unchanged or val.diff_type != 'unchanged' %}
+                    <tr class="{% if val.diff_type == 'added' %}bg-green-50 dark:bg-green-900/20{% elif val.diff_type == 'removed' %}bg-red-50 dark:bg-red-900/20{% elif val.diff_type == 'modified' %}bg-yellow-50 dark:bg-yellow-900/20{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if val.diff_type == 'added' %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400 text-xs font-bold">+</span>
+                            {% elif val.diff_type == 'removed' %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-400 text-xs font-bold">-</span>
+                            {% elif val.diff_type == 'modified' %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-600 dark:text-yellow-400 text-xs font-bold">~</span>
+                            {% else %}
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs">=</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap font-medium">{{ val.check_name }}</td>
+                        <td class="px-6 py-4 bg-blue-50/50 dark:bg-blue-900/10">
+                            {% if val.baseline_status %}
+                            <span class="px-2 py-1 text-xs rounded-full {% if val.baseline_status == 'valid' %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% elif val.baseline_status == 'invalid' %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% elif val.baseline_status == 'warning' %}bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200{% else %}bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200{% endif %}">
+                                {{ val.baseline_status }}
+                            </span>
+                            {% if val.baseline_message %}
+                            <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">{{ val.baseline_message[:50] }}{% if val.baseline_message|length > 50 %}...{% endif %}</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-gray-400 italic">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 bg-purple-50/50 dark:bg-purple-900/10">
+                            {% if val.comparison_status %}
+                            <span class="px-2 py-1 text-xs rounded-full {% if val.comparison_status == 'valid' %}bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200{% elif val.comparison_status == 'invalid' %}bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200{% elif val.comparison_status == 'warning' %}bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200{% else %}bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200{% endif %}">
+                                {{ val.comparison_status }}
+                            </span>
+                            {% if val.comparison_message %}
+                            <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">{{ val.comparison_message[:50] }}{% if val.comparison_message|length > 50 %}...{% endif %}</span>
+                            {% endif %}
+                            {% else %}
+                            <span class="text-gray-400 italic">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if not diff.validation_diffs %}
+        <div class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+            No validation checks to compare
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Actions -->
+    <div class="flex justify-between items-center">
+        <a href="{{ url_for('compare.index') }}" class="text-blue-500 hover:text-blue-600">
+            &larr; New Comparison
+        </a>
+        <div class="space-x-2">
+            <a href="{{ url_for('history.show', test_id=baseline.id) }}" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm">
+                View Baseline
+            </a>
+            <a href="{{ url_for('history.show', test_id=comparison.id) }}" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm">
+                View Comparison
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
