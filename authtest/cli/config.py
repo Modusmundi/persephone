@@ -700,6 +700,364 @@ def idp_show(name: str, output_json: bool) -> None:
         error_result(f"Database not initialized: {e}\nRun 'authtest config init' first.", output_json)
 
 
+@idp.command("from-preset")
+@click.argument("name")
+@click.option(
+    "--preset",
+    type=click.Choice(["keycloak"]),
+    required=True,
+    help="IdP preset to use",
+)
+@click.option(
+    "--type",
+    "idp_type",
+    type=click.Choice(["saml", "oidc"]),
+    default="saml",
+    help="Protocol type (default: saml)",
+)
+@click.option("--base-url", required=True, help="IdP server base URL")
+@click.option("--realm", help="Keycloak realm name (required for keycloak preset)")
+@click.option("--display-name", help="Display name for the IdP")
+@click.option("--discover/--no-discover", default=True, help="Auto-discover and fetch metadata/config")
+@json_option
+def idp_from_preset(
+    name: str,
+    preset: str,
+    idp_type: str,
+    base_url: str,
+    realm: str | None,
+    display_name: str | None,
+    discover: bool,
+    output_json: bool,
+) -> None:
+    """Add an Identity Provider from a preset configuration.
+
+    This command creates an IdP configuration using pre-defined templates
+    for common identity providers like Keycloak.
+
+    Examples:
+
+        # Add Keycloak SAML IdP
+        authtest config idp from-preset my-keycloak \\
+            --preset keycloak \\
+            --base-url https://keycloak.example.com \\
+            --realm myrealm
+
+        # Add Keycloak OIDC IdP with auto-discovery
+        authtest config idp from-preset my-keycloak-oidc \\
+            --preset keycloak \\
+            --type oidc \\
+            --base-url https://keycloak.example.com \\
+            --realm myrealm
+
+        # Add without fetching metadata
+        authtest config idp from-preset my-keycloak \\
+            --preset keycloak \\
+            --base-url https://keycloak.example.com \\
+            --realm myrealm \\
+            --no-discover
+    """
+    from authtest.storage import Database, IdPProvider, KeyNotFoundError
+
+    # Validate preset-specific requirements
+    if preset == "keycloak" and not realm:
+        error_result("--realm is required for the keycloak preset.", output_json)
+
+    try:
+        database = Database()
+        session = database.get_session()
+
+        # Check if name already exists
+        existing = session.query(IdPProvider).filter_by(name=name).first()
+        if existing:
+            session.close()
+            database.close()
+            error_result(f"IdP configuration '{name}' already exists.", output_json)
+
+        # Get preset configuration
+        if preset == "keycloak":
+            from authtest.idp_presets.keycloak import get_oidc_preset, get_saml_preset
+
+            preset_config = (
+                get_saml_preset(base_url, realm)  # type: ignore[arg-type]
+                if idp_type == "saml"
+                else get_oidc_preset(base_url, realm)  # type: ignore[arg-type]
+            )
+        else:
+            session.close()
+            database.close()
+            error_result(f"Unknown preset: {preset}", output_json)
+
+        # Try to discover metadata/config if requested
+        discovery_success: bool | None = None
+        discovery_error: str | None = None
+        if discover:
+            if not output_json:
+                click.echo(f"Discovering {idp_type.upper()} configuration...")
+
+            if idp_type == "saml":
+                from authtest.idp_presets.discovery import fetch_saml_metadata
+
+                metadata_url = preset_config.get("metadata_url")
+                if metadata_url:
+                    saml_result = fetch_saml_metadata(metadata_url)
+                    discovery_success = saml_result.success
+                    discovery_error = saml_result.error
+                    if saml_result.success:
+                        # Update preset_config with discovered values
+                        if saml_result.entity_id:
+                            preset_config["entity_id"] = saml_result.entity_id
+                        if saml_result.sso_url:
+                            preset_config["sso_url"] = saml_result.sso_url
+                        if saml_result.slo_url:
+                            preset_config["slo_url"] = saml_result.slo_url
+                        if saml_result.x509_cert:
+                            preset_config["x509_cert"] = saml_result.x509_cert
+                        if saml_result.metadata_xml:
+                            preset_config["metadata_xml"] = saml_result.metadata_xml
+                        if not output_json:
+                            click.echo("  Metadata fetched successfully")
+                    elif not output_json:
+                        click.echo(f"  Warning: {saml_result.error}")
+            else:  # oidc
+                from authtest.idp_presets.discovery import fetch_oidc_discovery
+
+                issuer = preset_config.get("issuer")
+                if issuer:
+                    oidc_result = fetch_oidc_discovery(issuer)
+                    discovery_success = oidc_result.success
+                    discovery_error = oidc_result.error
+                    if oidc_result.success:
+                        # Update preset_config with discovered values
+                        if oidc_result.issuer:
+                            preset_config["issuer"] = oidc_result.issuer
+                        if oidc_result.authorization_endpoint:
+                            preset_config["authorization_endpoint"] = oidc_result.authorization_endpoint
+                        if oidc_result.token_endpoint:
+                            preset_config["token_endpoint"] = oidc_result.token_endpoint
+                        if oidc_result.userinfo_endpoint:
+                            preset_config["userinfo_endpoint"] = oidc_result.userinfo_endpoint
+                        if oidc_result.jwks_uri:
+                            preset_config["jwks_uri"] = oidc_result.jwks_uri
+                        if not output_json:
+                            click.echo("  OIDC configuration discovered successfully")
+                    elif not output_json:
+                        click.echo(f"  Warning: {oidc_result.error}")
+
+        # Create the IdP configuration
+        idp_provider = IdPProvider(
+            name=name,
+            display_name=display_name or f"{preset.title()} - {name}",
+            idp_type=idp_type,
+            enabled=True,
+            settings=preset_config.get("settings", {}),
+            # SAML fields
+            entity_id=preset_config.get("entity_id"),
+            sso_url=preset_config.get("sso_url"),
+            slo_url=preset_config.get("slo_url"),
+            metadata_url=preset_config.get("metadata_url"),
+            metadata_xml=preset_config.get("metadata_xml"),
+            x509_cert=preset_config.get("x509_cert"),
+            # OIDC fields
+            issuer=preset_config.get("issuer"),
+            authorization_endpoint=preset_config.get("authorization_endpoint"),
+            token_endpoint=preset_config.get("token_endpoint"),
+            userinfo_endpoint=preset_config.get("userinfo_endpoint"),
+            jwks_uri=preset_config.get("jwks_uri"),
+        )
+
+        session.add(idp_provider)
+        session.commit()
+
+        result: dict[str, Any] = {
+            "status": "created",
+            "preset": preset,
+            "idp": {
+                "id": idp_provider.id,
+                "name": idp_provider.name,
+                "display_name": idp_provider.display_name,
+                "type": idp_provider.idp_type,
+                "enabled": idp_provider.enabled,
+            },
+            "discovery": {
+                "attempted": discover,
+                "success": discovery_success,
+                "error": discovery_error,
+            },
+        }
+
+        session.close()
+        database.close()
+
+        if output_json:
+            output_result(result, as_json=True)
+        else:
+            click.echo("")
+            click.echo(f"IdP configuration '{name}' created from {preset} preset.")
+            click.echo(f"  Type: {idp_type.upper()}")
+            if idp_type == "saml":
+                click.echo(f"  Entity ID: {idp_provider.entity_id}")
+                click.echo(f"  SSO URL: {idp_provider.sso_url}")
+                click.echo(f"  Metadata URL: {idp_provider.metadata_url}")
+                if idp_provider.x509_cert:
+                    click.echo("  Certificate: loaded")
+            else:
+                click.echo(f"  Issuer: {idp_provider.issuer}")
+                click.echo(f"  JWKS URI: {idp_provider.jwks_uri}")
+            click.echo("")
+            click.echo("Next steps:")
+            click.echo(f"  1. Configure the IdP (see: authtest config idp setup-guide --preset {preset})")
+            click.echo(f"  2. Test authentication: authtest test {idp_type} --idp {name}")
+
+    except KeyNotFoundError as e:
+        error_result(f"Database not initialized: {e}\nRun 'authtest config init' first.", output_json)
+
+
+@idp.command("setup-guide")
+@click.option(
+    "--preset",
+    type=click.Choice(["keycloak"]),
+    required=True,
+    help="IdP preset for setup guide",
+)
+@click.option("--base-url", help="IdP server base URL (for customized URLs)")
+@click.option("--realm", help="Keycloak realm name (for customized URLs)")
+def idp_setup_guide(preset: str, base_url: str | None, realm: str | None) -> None:
+    """Show setup guide for an IdP preset.
+
+    Displays step-by-step instructions for configuring the IdP to work
+    with AuthTest.
+
+    Examples:
+
+        # Show Keycloak setup guide
+        authtest config idp setup-guide --preset keycloak
+
+        # Show guide with customized URLs
+        authtest config idp setup-guide --preset keycloak \\
+            --base-url https://keycloak.example.com \\
+            --realm myrealm
+    """
+    if preset == "keycloak":
+        from authtest.idp_presets.keycloak import get_setup_guide
+
+        guide = get_setup_guide(base_url, realm)
+        click.echo(guide)
+    else:
+        raise click.ClickException(f"Unknown preset: {preset}")
+
+
+@idp.command("discover")
+@click.argument("url")
+@click.option(
+    "--type",
+    "protocol_type",
+    type=click.Choice(["saml", "oidc", "auto"]),
+    default="auto",
+    help="Protocol type to discover (default: auto-detect)",
+)
+@json_option
+def idp_discover(url: str, protocol_type: str, output_json: bool) -> None:
+    """Discover IdP configuration from a URL.
+
+    Fetches and parses SAML metadata or OIDC well-known configuration
+    from the provided URL. Use this to verify connectivity and preview
+    what configuration values will be used.
+
+    Examples:
+
+        # Auto-detect and discover
+        authtest config idp discover https://idp.example.com
+
+        # Discover SAML metadata
+        authtest config idp discover \\
+            https://keycloak.example.com/realms/test/protocol/saml/descriptor \\
+            --type saml
+
+        # Discover OIDC configuration
+        authtest config idp discover \\
+            https://keycloak.example.com/realms/test \\
+            --type oidc
+    """
+    from authtest.idp_presets.discovery import fetch_oidc_discovery, fetch_saml_metadata
+
+    # Auto-detect protocol type from URL
+    if protocol_type == "auto":
+        if ".well-known/openid-configuration" in url or "/protocol/openid-connect" in url:
+            protocol_type = "oidc"
+        elif "/saml" in url.lower() or url.endswith("/descriptor") or url.endswith("/metadata"):
+            protocol_type = "saml"
+        else:
+            # Try OIDC first (more common for plain URLs)
+            protocol_type = "oidc"
+
+    if not output_json:
+        click.echo(f"Discovering {protocol_type.upper()} configuration from {url}...")
+        click.echo("")
+
+    if protocol_type == "saml":
+        saml_result = fetch_saml_metadata(url)
+
+        if output_json:
+            output_result({
+                "success": saml_result.success,
+                "protocol": "saml",
+                "entity_id": saml_result.entity_id,
+                "sso_url": saml_result.sso_url,
+                "sso_binding": saml_result.sso_binding,
+                "slo_url": saml_result.slo_url,
+                "slo_binding": saml_result.slo_binding,
+                "has_certificate": bool(saml_result.x509_cert),
+                "name_id_formats": saml_result.name_id_formats,
+                "error": saml_result.error,
+            }, as_json=True)
+        elif saml_result.success:
+            click.echo("SAML IdP Metadata:")
+            click.echo(f"  Entity ID: {saml_result.entity_id}")
+            click.echo(f"  SSO URL: {saml_result.sso_url} ({saml_result.sso_binding})")
+            if saml_result.slo_url:
+                click.echo(f"  SLO URL: {saml_result.slo_url} ({saml_result.slo_binding})")
+            click.echo(f"  Certificate: {'present' if saml_result.x509_cert else 'not found'}")
+            if saml_result.name_id_formats:
+                click.echo(f"  NameID Formats: {len(saml_result.name_id_formats)}")
+                for fmt in saml_result.name_id_formats[:3]:
+                    click.echo(f"    - {fmt.split(':')[-1]}")
+        else:
+            click.echo(f"Error: {saml_result.error}", err=True)
+
+    else:  # oidc
+        oidc_result = fetch_oidc_discovery(url)
+
+        if output_json:
+            output_result({
+                "success": oidc_result.success,
+                "protocol": "oidc",
+                "issuer": oidc_result.issuer,
+                "authorization_endpoint": oidc_result.authorization_endpoint,
+                "token_endpoint": oidc_result.token_endpoint,
+                "userinfo_endpoint": oidc_result.userinfo_endpoint,
+                "jwks_uri": oidc_result.jwks_uri,
+                "end_session_endpoint": oidc_result.end_session_endpoint,
+                "scopes_supported": oidc_result.scopes_supported,
+                "grant_types_supported": oidc_result.grant_types_supported,
+                "error": oidc_result.error,
+            }, as_json=True)
+        elif oidc_result.success:
+            click.echo("OIDC Configuration:")
+            click.echo(f"  Issuer: {oidc_result.issuer}")
+            click.echo(f"  Authorization: {oidc_result.authorization_endpoint}")
+            click.echo(f"  Token: {oidc_result.token_endpoint}")
+            if oidc_result.userinfo_endpoint:
+                click.echo(f"  UserInfo: {oidc_result.userinfo_endpoint}")
+            click.echo(f"  JWKS: {oidc_result.jwks_uri}")
+            if oidc_result.end_session_endpoint:
+                click.echo(f"  Logout: {oidc_result.end_session_endpoint}")
+            if oidc_result.scopes_supported:
+                click.echo(f"  Scopes: {', '.join(oidc_result.scopes_supported[:5])}")
+        else:
+            click.echo(f"Error: {oidc_result.error}", err=True)
+
+
 @config.command("export")
 @click.argument("output", type=click.Path(path_type=Path))  # type: ignore[type-var]
 @click.option("--include-secrets", is_flag=True, help="Include client secrets in export (not recommended)")
