@@ -62,6 +62,13 @@
                         >
                             Implicit (Legacy)
                         </a>
+                        <a
+                            href="{{ url_for('oidc.device_code', idp_id=idp.id) }}"
+                            class="flex-1 text-center text-sm bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-3 rounded transition-colors"
+                            title="Device Authorization Grant"
+                        >
+                            Device Code
+                        </a>
                     </div>
                 </div>
                 {% endfor %}
@@ -161,6 +168,25 @@
                         </p>
                         <p class="text-xs text-gray-500 dark:text-gray-500 mt-2">
                             Best for: Testing legacy implementations only. Use Authorization Code + PKCE instead.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-start">
+                    <div class="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center mr-4 flex-shrink-0">
+                        <svg class="w-5 h-5 text-teal-600 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold">Device Code Flow</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            The Device Authorization Grant for devices with limited input capabilities.
+                            The device displays a code and URL, and the user authorizes on a separate
+                            device with a browser.
+                        </p>
+                        <p class="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                            Best for: Smart TVs, CLI tools, IoT devices, game consoles
                         </p>
                     </div>
                 </div>

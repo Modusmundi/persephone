@@ -88,6 +88,7 @@ class OIDCClientConfig:
 
     # Optional endpoints
     end_session_endpoint: str | None = None
+    device_authorization_endpoint: str | None = None
 
     @classmethod
     def from_idp(
@@ -125,6 +126,7 @@ class OIDCClientConfig:
             jwks_uri=idp.jwks_uri or "",
             issuer=idp.issuer or "",
             end_session_endpoint=idp.settings.get("logout_endpoint") if idp.settings else None,
+            device_authorization_endpoint=idp.settings.get("device_authorization_endpoint") if idp.settings else None,
         )
 
 
@@ -188,6 +190,30 @@ class UserInfoResponse:
     def is_success(self) -> bool:
         """Check if the userinfo response is successful."""
         return self.error is None and bool(self.sub)
+
+
+@dataclass
+class DeviceAuthorizationResponse:
+    """Represents an OAuth2 Device Authorization response."""
+
+    device_code: str
+    user_code: str
+    verification_uri: str
+    verification_uri_complete: str | None = None
+    expires_in: int | None = None
+    interval: int = 5  # Default polling interval in seconds
+
+    # Raw response for debugging
+    raw_response: dict[str, Any] = field(default_factory=dict)
+
+    # Error information
+    error: str | None = None
+    error_description: str | None = None
+
+    @property
+    def is_success(self) -> bool:
+        """Check if the device authorization was successful."""
+        return self.error is None and bool(self.device_code) and bool(self.user_code)
 
 
 class OIDCClient:
@@ -542,4 +568,178 @@ class OIDCClient:
                 token_type="",
                 error="unexpected_error",
                 error_description=f"Unexpected error during token request: {e}",
+            )
+
+    def device_authorization(
+        self,
+        scopes: list[str] | None = None,
+        additional_params: dict[str, str] | None = None,
+    ) -> DeviceAuthorizationResponse:
+        """Start the Device Authorization Grant flow.
+
+        Requests a device code and user code from the IdP's device authorization endpoint.
+
+        Args:
+            scopes: Scopes to request (defaults to client config scopes).
+            additional_params: Additional parameters to include in the request.
+
+        Returns:
+            DeviceAuthorizationResponse with device_code, user_code, and verification_uri.
+        """
+        # Device authorization endpoint - typically at /oauth2/device/authorization
+        device_endpoint = self.config.device_authorization_endpoint
+        if not device_endpoint:
+            return DeviceAuthorizationResponse(
+                device_code="",
+                user_code="",
+                verification_uri="",
+                error="no_endpoint",
+                error_description="Device authorization endpoint not configured",
+            )
+
+        request_scopes = scopes or self.config.scopes
+
+        data: dict[str, str] = {
+            "client_id": self.config.client_id,
+        }
+
+        if self.config.client_secret:
+            data["client_secret"] = self.config.client_secret
+
+        if request_scopes:
+            data["scope"] = " ".join(request_scopes)
+
+        if additional_params:
+            data.update(additional_params)
+
+        try:
+            response = self.http_client.post(
+                device_endpoint,
+                data=data,
+                headers={"Accept": "application/json"},
+            )
+
+            response_data = response.json()
+
+            if response.status_code != 200:
+                return DeviceAuthorizationResponse(
+                    device_code="",
+                    user_code="",
+                    verification_uri="",
+                    error=response_data.get("error", "device_auth_error"),
+                    error_description=response_data.get(
+                        "error_description",
+                        f"Device authorization request failed with status {response.status_code}",
+                    ),
+                    raw_response=response_data,
+                )
+
+            return DeviceAuthorizationResponse(
+                device_code=response_data.get("device_code", ""),
+                user_code=response_data.get("user_code", ""),
+                verification_uri=response_data.get("verification_uri", ""),
+                verification_uri_complete=response_data.get("verification_uri_complete"),
+                expires_in=response_data.get("expires_in"),
+                interval=response_data.get("interval", 5),
+                raw_response=response_data,
+            )
+
+        except httpx.HTTPError as e:
+            return DeviceAuthorizationResponse(
+                device_code="",
+                user_code="",
+                verification_uri="",
+                error="http_error",
+                error_description=f"HTTP error during device authorization: {e}",
+            )
+        except Exception as e:
+            return DeviceAuthorizationResponse(
+                device_code="",
+                user_code="",
+                verification_uri="",
+                error="unexpected_error",
+                error_description=f"Unexpected error during device authorization: {e}",
+            )
+
+    def poll_device_token(
+        self,
+        device_code: str,
+    ) -> TokenResponse:
+        """Poll the token endpoint for the device code grant.
+
+        This should be called at the specified interval until the user completes
+        authorization or the device code expires.
+
+        Args:
+            device_code: The device_code from the device authorization response.
+
+        Returns:
+            TokenResponse. Check error field for pending/slow_down statuses.
+        """
+        data: dict[str, str] = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            "device_code": device_code,
+            "client_id": self.config.client_id,
+        }
+
+        if self.config.client_secret:
+            data["client_secret"] = self.config.client_secret
+
+        try:
+            response = self.http_client.post(
+                self.config.token_endpoint,
+                data=data,
+                headers={"Accept": "application/json"},
+            )
+
+            response_data = response.json()
+
+            # Check for authorization pending or slow_down responses
+            # These are expected during polling and have 400 status but aren't errors
+            if response.status_code == 400:
+                error_code = response_data.get("error")
+                if error_code in ("authorization_pending", "slow_down"):
+                    return TokenResponse(
+                        access_token="",
+                        token_type="",
+                        error=error_code,
+                        error_description=response_data.get("error_description"),
+                        raw_response=response_data,
+                    )
+
+            if response.status_code != 200:
+                return TokenResponse(
+                    access_token="",
+                    token_type="",
+                    error=response_data.get("error", "token_error"),
+                    error_description=response_data.get(
+                        "error_description",
+                        f"Token request failed with status {response.status_code}",
+                    ),
+                    raw_response=response_data,
+                )
+
+            return TokenResponse(
+                access_token=response_data.get("access_token", ""),
+                token_type=response_data.get("token_type", "Bearer"),
+                expires_in=response_data.get("expires_in"),
+                refresh_token=response_data.get("refresh_token"),
+                id_token=response_data.get("id_token"),
+                scope=response_data.get("scope"),
+                raw_response=response_data,
+            )
+
+        except httpx.HTTPError as e:
+            return TokenResponse(
+                access_token="",
+                token_type="",
+                error="http_error",
+                error_description=f"HTTP error during token poll: {e}",
+            )
+        except Exception as e:
+            return TokenResponse(
+                access_token="",
+                token_type="",
+                error="unexpected_error",
+                error_description=f"Unexpected error during token poll: {e}",
             )

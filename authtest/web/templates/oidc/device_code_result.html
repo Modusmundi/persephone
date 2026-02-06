@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+
+{% block title %}Device Code Result - AuthTest{% endblock %}
+
+{% block content %}
+<style>
+    /* JSON Syntax Highlighting */
+    .json-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 0.75rem;
+        line-height: 1.5;
+    }
+    .json-key { color: #9cdcfe; }
+    .json-string { color: #ce9178; }
+    .json-number { color: #b5cea8; }
+    .json-boolean { color: #569cd6; }
+    .json-null { color: #569cd6; }
+
+    /* Light mode */
+    @media (prefers-color-scheme: light) {
+        .json-viewer {
+            background: #f5f5f5;
+            color: #333;
+        }
+        .json-key { color: #0000ff; }
+        .json-string { color: #008000; }
+        .json-number { color: #098658; }
+        .json-boolean { color: #0000ff; }
+        .json-null { color: #0000ff; }
+    }
+
+    .dark .json-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+    }
+
+    /* Timeline styles */
+    .timeline {
+        position: relative;
+        padding-left: 2rem;
+    }
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 0.5rem;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e5e7eb;
+    }
+    .dark .timeline::before {
+        background: #374151;
+    }
+    .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+    }
+    .timeline-item:last-child {
+        padding-bottom: 0;
+    }
+    .timeline-dot {
+        position: absolute;
+        left: -1.75rem;
+        width: 1rem;
+        height: 1rem;
+        border-radius: 50%;
+        border: 2px solid;
+        background: white;
+    }
+    .dark .timeline-dot {
+        background: #1f2937;
+    }
+    .timeline-dot.completed { border-color: #10b981; background: #10b981; }
+    .timeline-dot.failed { border-color: #ef4444; background: #ef4444; }
+    .timeline-dot.pending { border-color: #9ca3af; }
+</style>
+
+<div class="max-w-5xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">Device Code Flow Result</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Tested against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    <!-- Result Summary -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    {% if result.outcome.value == 'passed' %}
+                    <div class="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-green-600 dark:text-green-400">Test Passed</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% elif result.outcome.value == 'failed' %}
+                    <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-red-600 dark:text-red-400">Test Failed</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% else %}
+                    <div class="w-16 h-16 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-yellow-600 dark:text-yellow-400">Test Error</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if result.duration_ms %}
+                <div class="text-right">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Duration</p>
+                    <p class="text-2xl font-semibold">{{ (result.duration_ms / 1000) | round(2) }}s</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Code Info -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Device Authorization Details</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">User Code</dt>
+                    <dd class="mt-1 font-mono font-bold text-lg">{{ state.user_code }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Verification URI</dt>
+                    <dd class="mt-1 font-mono text-xs break-all">{{ state.verification_uri }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Polling Interval</dt>
+                    <dd class="mt-1">{{ state.polling_interval }} seconds</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Total Polls</dt>
+                    <dd class="mt-1">{{ state.poll_count }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Flow Timeline -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Flow Timeline</h2>
+        </div>
+        <div class="p-4">
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Flow Started</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Device authorization requested</p>
+                        </div>
+                        {% if state.started_at %}
+                        <span class="text-xs text-gray-400">{{ state.started_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if state.preflight %}
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.preflight.all_passed %}completed{% else %}failed{% endif %}"></div>
+                    <div>
+                        <p class="font-medium">Preflight Checks</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            {% if state.preflight.all_passed %}All checks passed{% else %}Some checks failed{% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Device Authorized</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                Received user_code: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ state.user_code }}</code>
+                            </p>
+                        </div>
+                        {% if state.device_authorized_at %}
+                        <span class="text-xs text-gray-400">{{ state.device_authorized_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.token_response and state.token_response.is_success %}completed{% else %}failed{% endif %}"></div>
+                    <div>
+                        <p class="font-medium">Token Polling</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            {% if state.token_response and state.token_response.is_success %}
+                            Token received after {{ state.poll_count }} poll(s)
+                            <span class="inline-block ml-2 bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 px-2 py-0.5 rounded text-xs">
+                                device_code
+                            </span>
+                            {% else %}
+                            Error: {{ state.error if state.error else 'Unknown' }}
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.status.value == 'completed' %}completed{% else %}failed{% endif %}"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Flow {% if state.status.value == 'completed' %}Completed{% else %}Failed{% endif %}</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {% if state.error %}{{ state.error_description or state.error }}{% else %}Token obtained successfully{% endif %}
+                            </p>
+                        </div>
+                        {% if state.completed_at %}
+                        <span class="text-xs text-gray-400">{{ state.completed_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if state.token_response and state.token_response.is_success %}
+    <!-- Token Response -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Token Response</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Token Type</dt>
+                    <dd class="mt-1 font-medium">{{ state.token_response.token_type }}</dd>
+                </div>
+                {% if state.token_response.expires_in %}
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Expires In</dt>
+                    <dd class="mt-1">{{ state.token_response.expires_in }} seconds</dd>
+                </div>
+                {% endif %}
+                {% if state.token_response.scope %}
+                <div class="md:col-span-2">
+                    <dt class="text-gray-500 dark:text-gray-400">Granted Scopes</dt>
+                    <dd class="mt-1">
+                        {% for scope in state.token_response.scope.split(' ') %}
+                        <span class="inline-block bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs mr-1 mb-1">{{ scope }}</span>
+                        {% endfor %}
+                    </dd>
+                </div>
+                {% endif %}
+            </dl>
+
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-sm mb-2">Tokens Received</h3>
+                <div class="flex flex-wrap gap-2">
+                    {% if state.token_response.access_token %}
+                    <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Access Token
+                    </span>
+                    {% endif %}
+                    {% if state.token_response.id_token %}
+                    <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        ID Token
+                    </span>
+                    {% endif %}
+                    {% if state.token_response.refresh_token %}
+                    <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Refresh Token
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if state.id_token_decoded and state.id_token_decoded.is_valid_format %}
+    <!-- ID Token Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">ID Token (Decoded JWT)</h2>
+                {% if state.id_token_validation %}
+                <div class="flex items-center">
+                    {% if state.id_token_validation.signature_valid %}
+                    <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Signature Valid
+                    </span>
+                    {% elif state.id_token_validation.signature_valid is sameas false %}
+                    <span class="inline-flex items-center bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        Signature Invalid
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="p-4">
+            <!-- Token Payload (Claims) -->
+            <div class="mb-4">
+                <h3 class="font-semibold text-sm mb-2">Claims</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 dark:border-gray-700">
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Claim</th>
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Description</th>
+                                <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for key, value in state.id_token_decoded.payload.items() %}
+                            <tr class="border-b border-gray-100 dark:border-gray-700">
+                                <td class="py-2 pr-4 align-top font-medium font-mono text-xs">{{ key }}</td>
+                                <td class="py-2 pr-4 align-top text-gray-500 dark:text-gray-400 text-xs">{{ get_claim_description(key) }}</td>
+                                <td class="py-2 font-mono text-xs break-all">
+                                    {% if key in ['exp', 'iat', 'nbf', 'auth_time'] and value is number %}
+                                    {{ value }}
+                                    <span class="text-gray-500 ml-2">({{ value | timestamp_to_datetime }})</span>
+                                    {% elif value is mapping %}
+                                    <pre class="whitespace-pre-wrap">{{ value | tojson(indent=2) }}</pre>
+                                    {% elif value is iterable and value is not string %}
+                                    {{ value | join(', ') }}
+                                    {% elif value is sameas true %}
+                                    <span class="text-green-600">true</span>
+                                    {% elif value is sameas false %}
+                                    <span class="text-red-600">false</span>
+                                    {% else %}
+                                    {{ value }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if state.access_token_decoded and state.access_token_decoded.is_valid_format %}
+    <!-- Access Token Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">Access Token (Decoded JWT)</h2>
+                {% if state.access_token_validation %}
+                <div class="flex items-center">
+                    {% if state.access_token_validation.signature_valid %}
+                    <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Signature Valid
+                    </span>
+                    {% elif state.access_token_validation.signature_valid is sameas false %}
+                    <span class="inline-flex items-center bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        Signature Invalid
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="p-4">
+            <!-- Token Payload (Claims) -->
+            <div class="mb-4">
+                <h3 class="font-semibold text-sm mb-2">Claims</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-200 dark:border-gray-700">
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Claim</th>
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Description</th>
+                                <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for key, value in state.access_token_decoded.payload.items() %}
+                            <tr class="border-b border-gray-100 dark:border-gray-700">
+                                <td class="py-2 pr-4 align-top font-medium font-mono text-xs">{{ key }}</td>
+                                <td class="py-2 pr-4 align-top text-gray-500 dark:text-gray-400 text-xs">{{ get_claim_description(key) }}</td>
+                                <td class="py-2 font-mono text-xs break-all">
+                                    {% if key in ['exp', 'iat', 'nbf', 'auth_time'] and value is number %}
+                                    {{ value }}
+                                    <span class="text-gray-500 ml-2">({{ value | timestamp_to_datetime }})</span>
+                                    {% elif value is mapping %}
+                                    <pre class="whitespace-pre-wrap">{{ value | tojson(indent=2) }}</pre>
+                                    {% elif value is iterable and value is not string %}
+                                    {{ value | join(', ') }}
+                                    {% elif value is sameas true %}
+                                    <span class="text-green-600">true</span>
+                                    {% elif value is sameas false %}
+                                    <span class="text-red-600">false</span>
+                                    {% else %}
+                                    {{ value }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Raw Tokens (Collapsible) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <details>
+            <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-semibold">Raw Tokens</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+            </summary>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 space-y-4">
+                {% if state.token_response.access_token %}
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium text-sm">Access Token</span>
+                        <button
+                            onclick="copyToClipboard('access-token')"
+                            class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                    <pre id="access-token" class="json-viewer whitespace-pre-wrap break-all">{{ state.token_response.access_token }}</pre>
+                </div>
+                {% endif %}
+                {% if state.token_response.id_token %}
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium text-sm">ID Token</span>
+                        <button
+                            onclick="copyToClipboard('id-token')"
+                            class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                    <pre id="id-token" class="json-viewer whitespace-pre-wrap break-all">{{ state.token_response.id_token }}</pre>
+                </div>
+                {% endif %}
+                {% if state.token_response.refresh_token %}
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium text-sm">Refresh Token</span>
+                        <button
+                            onclick="copyToClipboard('refresh-token')"
+                            class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                    <pre id="refresh-token" class="json-viewer whitespace-pre-wrap break-all">{{ state.token_response.refresh_token }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    {% if state.error %}
+    <!-- Error Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-red-600 dark:text-red-400">Error Details</h2>
+        </div>
+        <div class="p-4">
+            <dl class="space-y-4">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400 text-sm">Error Code</dt>
+                    <dd class="font-mono text-red-600 dark:text-red-400 mt-1">{{ state.error }}</dd>
+                </div>
+                {% if state.error_description %}
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400 text-sm">Error Description</dt>
+                    <dd class="mt-1">{{ state.error_description }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="flex space-x-4">
+        <a
+            href="{{ url_for('oidc.device_code', idp_id=idp.id) }}"
+            class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Run Again
+        </a>
+        <a
+            href="{{ url_for('oidc.index') }}"
+            class="flex-1 text-center bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Back to OIDC Tests
+        </a>
+    </div>
+
+    <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+        Result saved with ID: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ result_id }}</code>
+    </p>
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    const text = element.textContent || element.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 1500);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+    });
+}
+</script>
+{% endblock %}

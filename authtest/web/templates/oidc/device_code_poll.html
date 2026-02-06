@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Device Code - Waiting for Authorization{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">Device Authorization</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Testing against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="mb-6">
+        {% for category, message in messages %}
+        <div class="p-4 rounded-lg mb-2 {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% else %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- User Code Display -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-6 text-center">
+            <div class="mb-4">
+                <svg class="w-16 h-16 text-blue-600 dark:text-blue-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                </svg>
+            </div>
+            <h2 class="text-lg font-semibold mb-2">Enter this code on another device</h2>
+            <p class="text-gray-500 dark:text-gray-400 mb-6">
+                Visit the URL below and enter the following code to authorize this device
+            </p>
+
+            <!-- User Code -->
+            <div class="mb-6">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">Your Code:</p>
+                <div class="inline-block bg-gray-100 dark:bg-gray-700 px-8 py-4 rounded-lg">
+                    <span class="text-4xl font-mono font-bold tracking-widest text-blue-600 dark:text-blue-400">
+                        {{ state.user_code }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Verification URI -->
+            <div class="mb-6">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">Go to:</p>
+                <a
+                    href="{{ state.verification_uri_complete or state.verification_uri }}"
+                    target="_blank"
+                    class="text-lg text-blue-600 dark:text-blue-400 hover:underline font-mono break-all"
+                >
+                    {{ state.verification_uri }}
+                </a>
+                {% if state.verification_uri_complete %}
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Or use the direct link (code pre-filled):
+                    <a href="{{ state.verification_uri_complete }}" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">
+                        {{ state.verification_uri_complete }}
+                    </a>
+                </p>
+                {% endif %}
+            </div>
+
+            <!-- Expiration Warning -->
+            {% if state.device_code_expires_in %}
+            <div class="text-sm text-yellow-600 dark:text-yellow-400">
+                <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Code expires in <span id="countdown">{{ state.device_code_expires_in }}</span> seconds
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Polling Status -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Authorization Status</h2>
+        </div>
+        <div class="p-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-yellow-500 rounded-full mr-3 animate-pulse"></div>
+                    <span class="text-gray-600 dark:text-gray-400">Waiting for user to authorize...</span>
+                </div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                    Poll count: <span id="poll-count">{{ state.poll_count }}</span>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Polling every <span id="interval">{{ state.polling_interval }}</span> seconds
+            </p>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex space-x-4">
+        <form action="{{ url_for('oidc.device_code_check') }}" method="POST" class="flex-1" id="check-form">
+            <button
+                type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors"
+                id="check-btn"
+            >
+                <span id="check-btn-text">Check Authorization Status</span>
+                <span id="check-btn-loading" class="hidden">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Checking...
+                </span>
+            </button>
+        </form>
+        <form action="{{ url_for('oidc.cancel_device_code') }}" method="POST">
+            <button
+                type="submit"
+                class="bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+            >
+                Cancel
+            </button>
+        </form>
+    </div>
+
+    <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+        After authorizing on the other device, click "Check Authorization Status" or wait for automatic polling.
+    </p>
+</div>
+
+<script>
+// Countdown timer for code expiration
+{% if state.device_code_expires_in %}
+let countdown = {{ state.device_code_expires_in }};
+const countdownEl = document.getElementById('countdown');
+
+const countdownInterval = setInterval(function() {
+    countdown--;
+    if (countdown <= 0) {
+        clearInterval(countdownInterval);
+        countdownEl.textContent = 'expired';
+        countdownEl.classList.add('text-red-600', 'dark:text-red-400');
+    } else {
+        countdownEl.textContent = countdown;
+    }
+}, 1000);
+{% endif %}
+
+// Auto-poll at the specified interval
+const pollInterval = {{ state.polling_interval }} * 1000;
+let pollCount = {{ state.poll_count }};
+const pollCountEl = document.getElementById('poll-count');
+const checkBtn = document.getElementById('check-btn');
+const checkBtnText = document.getElementById('check-btn-text');
+const checkBtnLoading = document.getElementById('check-btn-loading');
+const checkForm = document.getElementById('check-form');
+
+function showLoading() {
+    checkBtnText.classList.add('hidden');
+    checkBtnLoading.classList.remove('hidden');
+    checkBtn.disabled = true;
+}
+
+// Submit form handler
+checkForm.addEventListener('submit', function() {
+    showLoading();
+});
+
+// Auto-poll timer
+setTimeout(function pollForToken() {
+    pollCount++;
+    pollCountEl.textContent = pollCount;
+    showLoading();
+    checkForm.submit();
+}, pollInterval);
+</script>
+{% endblock %}

@@ -2,6 +2,7 @@
 
 from authtest.core.oidc.client import (
     AuthorizationRequest,
+    DeviceAuthorizationResponse,
     OIDCClient,
     OIDCClientConfig,
     TokenResponse,
@@ -12,6 +13,8 @@ from authtest.core.oidc.client import (
 from authtest.core.oidc.flows import (
     AuthorizationCodeFlow,
     ClientCredentialsFlow,
+    DeviceCodeFlow,
+    DeviceCodeFlowState,
     ImplicitFlow,
     OIDCFlowResult,
     OIDCFlowState,
@@ -39,6 +42,7 @@ from authtest.core.oidc.validation import (
 __all__ = [
     # Client
     "AuthorizationRequest",
+    "DeviceAuthorizationResponse",
     "OIDCClient",
     "OIDCClientConfig",
     "TokenResponse",
@@ -48,6 +52,8 @@ __all__ = [
     # Flows
     "AuthorizationCodeFlow",
     "ClientCredentialsFlow",
+    "DeviceCodeFlow",
+    "DeviceCodeFlowState",
     "ImplicitFlow",
     "OIDCFlowResult",
     "OIDCFlowState",

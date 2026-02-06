@@ -92,6 +92,16 @@ after each iteration and it's included in prompts for context.
 - Web routes in `authtest/web/routes/compare.py` with compare_bp blueprint and API endpoints for dynamic comparison
 - Side-by-side diff UI with color-coded indicators (+added, -removed, ~modified)
 
+### OIDC Device Code Flow Pattern
+- DeviceCodeFlow class in `authtest/core/oidc/flows.py` follows same pattern as other OIDC flows
+- DeviceCodeFlowState dataclass has unique fields: device_code, user_code, verification_uri, polling_interval, poll_count
+- Two-phase flow: request_device_authorization() → poll_for_token() (called repeatedly)
+- OIDCClient methods: device_authorization() for initial request, poll_device_token() for polling
+- Device authorization endpoint stored in IdP.settings['device_authorization_endpoint']
+- Grant type for polling: `urn:ietf:params:oauth:grant-type:device_code`
+- Handle `authorization_pending` (continue) and `slow_down` (increase interval by 5s) error codes
+- Web UI uses auto-polling with JavaScript setTimeout() and countdown timer for expiration
+
 ---
 
 ### OIDC Discovery Pattern
@@ -677,5 +687,39 @@ after each iteration and it's included in prompts for context.
   - Environment variable names must match codebase (`AUTHTEST_DB_KEY` not `APP_DB_KEY`)
   - WeasyPrint requires pango, pangocairo, gdk-pixbuf, shared-mime-info in runtime image
   - .dockerignore improves build speed by excluding .venv, .git, docs, tests, etc.
+---
+
+## 2026-02-06 - US-030
+- **What was implemented**: OIDC Device Code flow (Device Authorization Grant)
+- **Files created/modified**:
+  - `authtest/core/oidc/client.py` - Added `DeviceAuthorizationResponse` dataclass, `device_authorization_endpoint` to OIDCClientConfig, `device_authorization()` and `poll_device_token()` methods to OIDCClient
+  - `authtest/core/oidc/flows.py` - Added `DeviceCodeFlowState` dataclass and `DeviceCodeFlow` class following same patterns as other flows
+  - `authtest/core/oidc/__init__.py` - Exported DeviceCodeFlow, DeviceCodeFlowState, DeviceAuthorizationResponse
+  - `authtest/web/routes/oidc.py` - Added `/device-code`, `/device-code/poll`, `/device-code/check`, `/device-code/cancel` routes
+  - `authtest/web/templates/oidc/device_code.html` (NEW) - Preflight checks and scope configuration UI
+  - `authtest/web/templates/oidc/device_code_poll.html` (NEW) - Display user_code and verification_uri with auto-polling
+  - `authtest/web/templates/oidc/device_code_result.html` (NEW) - Token display with decoded JWT and validation
+  - `authtest/web/templates/oidc/index.html` - Added Device Code flow button and description
+- **Features implemented**:
+  - Device authorization request to get device_code and user_code
+  - Display of user_code and verification_uri (with optional verification_uri_complete)
+  - Token endpoint polling with device_code using grant_type=urn:ietf:params:oauth:grant-type:device_code
+  - Proper handling of `authorization_pending` (continue polling) and `slow_down` (increase interval) responses
+  - Token decoding and signature validation for both ID token and access token
+  - Auto-polling with configurable interval and countdown timer for code expiration
+  - Full test result recording to database
+- **Acceptance Criteria Met**:
+  - [x] Device authorization request
+  - [x] Display user_code and verification_uri
+  - [x] Polling for token with device_code
+  - [x] Proper handling of pending/slow_down responses
+- **Learnings:**
+  - Device Authorization endpoint is separate from token endpoint (typically at /oauth2/device/authorization)
+  - The grant_type for token polling is `urn:ietf:params:oauth:grant-type:device_code` (not just "device_code")
+  - Device code flow uses `authorization_pending` error (not HTTP 202) to indicate user hasn't authorized yet
+  - `slow_down` error means polling too fast - spec says to increase interval by 5 seconds
+  - IdP may provide `verification_uri_complete` with user_code pre-filled for QR code scenarios
+  - Device code flow typically uses public clients (no client_secret required)
+  - The device_code expires (usually 900 seconds), and the flow must complete before expiration
 ---
 

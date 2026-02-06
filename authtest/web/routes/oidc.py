@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 from authtest.core.oidc.flows import (
     AuthorizationCodeFlow,
     ClientCredentialsFlow,
+    DeviceCodeFlow,
+    DeviceCodeFlowState,
     ImplicitFlow,
     OIDCFlowState,
     OIDCFlowStatus,
@@ -713,4 +715,226 @@ def cancel_implicit() -> WerkzeugResponse:
     """Cancel an in-progress implicit flow."""
     session.pop(OIDC_IMPLICIT_FLOW_STATE_KEY, None)
     flash("Implicit flow test cancelled", "info")
+    return redirect(url_for("oidc.index"))
+
+
+# Session key for device code flow state
+OIDC_DEVICE_FLOW_STATE_KEY = "oidc_device_flow_state"
+
+
+@oidc_bp.route("/device-code", methods=["GET", "POST"])
+def device_code() -> str | WerkzeugResponse:
+    """Device Code flow test page."""
+    if request.method == "GET":
+        # Show IdP selection or preflight if IdP already selected
+        idp_id = request.args.get("idp_id", type=int)
+        if not idp_id:
+            return redirect(url_for("oidc.index"))
+
+        db = get_database()
+        db_session = db.get_session()
+
+        try:
+            idp = db_session.query(IdPProvider).get(idp_id)
+            if not idp or idp.idp_type != IdPType.OIDC:
+                flash("Invalid IdP selected", "error")
+                return redirect(url_for("oidc.index"))
+
+            # Get client credentials
+            client_id, client_secret = get_client_config(idp)
+
+            if not client_id:
+                flash(
+                    "No client credentials configured for this IdP. "
+                    "Please configure client_id in IdP settings or create a Client Config.",
+                    "error",
+                )
+                return redirect(url_for("oidc.index"))
+
+            # Check for device authorization endpoint
+            device_endpoint = idp.settings.get("device_authorization_endpoint") if idp.settings else None
+            if not device_endpoint:
+                flash(
+                    "Device authorization endpoint not configured. "
+                    "Please add device_authorization_endpoint to IdP settings.",
+                    "error",
+                )
+                return redirect(url_for("oidc.index"))
+
+            # Start the flow and run preflight checks
+            flow = DeviceCodeFlow(
+                idp=idp,
+                db=db,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+            state = flow.start_flow()
+
+            # Store state in session
+            session[OIDC_DEVICE_FLOW_STATE_KEY] = state.to_dict()
+
+            return render_template(
+                "oidc/device_code.html",
+                idp=idp,
+                state=state,
+                preflight=state.preflight,
+            )
+        finally:
+            db_session.close()
+
+    # POST - user confirmed, request device authorization
+    state_dict = session.get(OIDC_DEVICE_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active flow found", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = DeviceCodeFlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        # Get client credentials
+        client_id, client_secret = get_client_config(idp)
+
+        flow = DeviceCodeFlow(
+            idp=idp,
+            db=db,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+        # Get scopes from form
+        scopes_input = request.form.get("scopes", "").strip()
+        scopes = scopes_input.split() if scopes_input else None
+
+        # Request device authorization
+        state = flow.request_device_authorization(state, scopes=scopes)
+
+        if state.status == OIDCFlowStatus.FAILED:
+            flash(state.error_description or state.error or "Device authorization failed", "error")
+            session.pop(OIDC_DEVICE_FLOW_STATE_KEY, None)
+            return redirect(url_for("oidc.device_code", idp_id=idp.id))
+
+        # Update session state
+        session[OIDC_DEVICE_FLOW_STATE_KEY] = state.to_dict()
+
+        # Redirect to the polling page
+        return redirect(url_for("oidc.device_code_poll"))
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/device-code/poll")
+def device_code_poll() -> str | WerkzeugResponse:
+    """Device Code polling page - displays user_code and verification_uri."""
+    state_dict = session.get(OIDC_DEVICE_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active Device Code flow found. Please start a new test.", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = DeviceCodeFlowState.from_dict(state_dict)
+
+    if state.status not in (OIDCFlowStatus.WAITING_CALLBACK, OIDCFlowStatus.EXCHANGING):
+        flash("Device Code flow is not in polling state", "error")
+        return redirect(url_for("oidc.index"))
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        return render_template(
+            "oidc/device_code_poll.html",
+            idp=idp,
+            state=state,
+        )
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/device-code/check", methods=["POST"])
+def device_code_check() -> str | WerkzeugResponse:
+    """Check if user has completed device authorization (called via AJAX or form)."""
+    state_dict = session.get(OIDC_DEVICE_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active Device Code flow found", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = DeviceCodeFlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        # Get client credentials
+        client_id, client_secret = get_client_config(idp)
+
+        flow = DeviceCodeFlow(
+            idp=idp,
+            db=db,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+        # Poll for token
+        state = flow.poll_for_token(state)
+
+        # Update session state
+        session[OIDC_DEVICE_FLOW_STATE_KEY] = state.to_dict()
+
+        # Check if completed or failed
+        if state.status == OIDCFlowStatus.COMPLETED:
+            # Record result and redirect to result page
+            result_id = flow.record_result(state)
+            result = flow.get_flow_result(state)
+            session.pop(OIDC_DEVICE_FLOW_STATE_KEY, None)
+
+            return render_template(
+                "oidc/device_code_result.html",
+                idp=idp,
+                state=state,
+                result=result,
+                result_id=result_id,
+            )
+
+        if state.status == OIDCFlowStatus.FAILED:
+            # Record failed result
+            result_id = flow.record_result(state)
+            result = flow.get_flow_result(state)
+            session.pop(OIDC_DEVICE_FLOW_STATE_KEY, None)
+
+            return render_template(
+                "oidc/device_code_result.html",
+                idp=idp,
+                state=state,
+                result=result,
+                result_id=result_id,
+            )
+
+        # Still pending - redirect back to poll page
+        return redirect(url_for("oidc.device_code_poll"))
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/device-code/cancel", methods=["POST"])
+def cancel_device_code() -> WerkzeugResponse:
+    """Cancel an in-progress device code flow."""
+    session.pop(OIDC_DEVICE_FLOW_STATE_KEY, None)
+    flash("Device Code flow test cancelled", "info")
     return redirect(url_for("oidc.index"))

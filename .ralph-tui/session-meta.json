@@ -2,12 +2,12 @@
   "id": "25d82f5e-e3a0-4aea-88db-13c8150ce3e5",
   "status": "running",
   "startedAt": "2026-02-06T01:00:15.694Z",
-  "updatedAt": "2026-02-06T23:17:50.044Z",
+  "updatedAt": "2026-02-06T23:30:50.902Z",
   "agentPlugin": "claude",
   "trackerPlugin": "json",
-  "currentIteration": 19,
-  "maxIterations": 20,
+  "currentIteration": 20,
+  "maxIterations": 21,
   "totalTasks": 0,
-  "tasksCompleted": 18,
+  "tasksCompleted": 19,
   "cwd": "/Users/modus/Documents/workspace/persephone"
 }
