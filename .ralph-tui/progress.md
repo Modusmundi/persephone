@@ -80,3 +80,34 @@ after each iteration and it's included in prompts for context.
   - Type annotations from `dict[str, Any]` in models require explicit casting when returning specific types
 ---
 
+## 2026-02-05 - US-031
+- **What was implemented**: Certificate management web UI
+- **Files created/changed**:
+  - `authtest/web/routes/certs.py` - New route module with:
+    - `/certs/` - List all certificates with status
+    - `/certs/generate` - Generate self-signed certificates (signing or TLS)
+    - `/certs/import` - Import PEM or PKCS#12 certificates
+    - `/certs/view/<name>` - View certificate details (subject, issuer, SANs, key usage)
+    - `/certs/download/<name>` - Download certificate as PEM
+    - `/certs/delete/<name>` - Delete certificate and key
+    - `/certs/validate/<name>` - Validate certificate chain
+  - `authtest/web/templates/certs/index.html` - Certificate list with table view
+  - `authtest/web/templates/certs/generate.html` - Form for certificate generation
+  - `authtest/web/templates/certs/import.html` - Form for importing PEM/PKCS#12
+  - `authtest/web/templates/certs/view.html` - Detailed certificate view with all extensions
+  - `authtest/web/templates/certs/validate.html` - Chain validation results page
+  - `authtest/web/routes/__init__.py` - Registered certs_bp blueprint
+  - `authtest/web/templates/base.html` - Added Certificates link to navigation
+  - `authtest/web/templates/index.html` - Added Certificates card to dashboard
+- **Verification**:
+  - Type checks pass (mypy)
+  - Linting passes (ruff)
+  - All 33 tests pass
+  - Routes correctly registered in Flask app
+- **Learnings:**
+  - Web UI reuses core `authtest.core.crypto` module which already has all certificate functions
+  - Flask blueprints need `template_folder` to find templates in subdirectories
+  - PKCS#12 format detection can use file extension (.p12, .pfx)
+  - Certificate chain validation needs to parse multiple PEM certs from single file
+---
+

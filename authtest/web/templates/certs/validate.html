@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Validate {{ name }} - AuthTest{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{{ url_for('certs.view', name=name) }}" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to Certificate Details
+    </a>
+</div>
+
+<h1 class="text-2xl font-bold mb-2">Certificate Validation</h1>
+<p class="text-gray-600 dark:text-gray-400 mb-6">{{ name }} - {{ info.subject }}</p>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+    <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="text-lg font-semibold">Validation Results</h2>
+    </div>
+    <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+        {% for result in results %}
+        <li class="p-4 flex items-start">
+            <div class="flex-shrink-0 mt-0.5">
+                {% if result.passed is true %}
+                    <svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                    </svg>
+                {% elif result.passed is false %}
+                    <svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                    </svg>
+                {% else %}
+                    <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                {% endif %}
+            </div>
+            <div class="ml-3">
+                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ result.check }}</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ result.message }}</p>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Summary -->
+{% set passed_count = results | selectattr('passed', 'equalto', true) | list | length %}
+{% set failed_count = results | selectattr('passed', 'equalto', false) | list | length %}
+{% set info_count = results | selectattr('passed', 'none') | list | length %}
+
+<div class="mt-6 grid grid-cols-3 gap-4">
+    <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-green-600 dark:text-green-400">{{ passed_count }}</div>
+        <div class="text-sm text-green-800 dark:text-green-200">Passed</div>
+    </div>
+    <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-red-600 dark:text-red-400">{{ failed_count }}</div>
+        <div class="text-sm text-red-800 dark:text-red-200">Failed</div>
+    </div>
+    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-gray-600 dark:text-gray-400">{{ info_count }}</div>
+        <div class="text-sm text-gray-800 dark:text-gray-200">Informational</div>
+    </div>
+</div>
+
+{% if failed_count > 0 %}
+<div class="mt-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <h3 class="text-sm font-medium text-red-800 dark:text-red-200">Validation Issues Detected</h3>
+            <p class="mt-2 text-sm text-red-700 dark:text-red-300">
+                This certificate has {{ failed_count }} validation issue{{ 's' if failed_count > 1 else '' }}.
+                Review the failed checks above and consider regenerating or replacing the certificate.
+            </p>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="mt-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+    <div class="flex">
+        <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+            </svg>
+        </div>
+        <div class="ml-3">
+            <h3 class="text-sm font-medium text-green-800 dark:text-green-200">All Checks Passed</h3>
+            <p class="mt-2 text-sm text-green-700 dark:text-green-300">
+                This certificate passed all validation checks and is ready for use.
+            </p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="mt-6 flex space-x-3">
+    <a href="{{ url_for('certs.view', name=name) }}" class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+        Back to Details
+    </a>
+    <a href="{{ url_for('certs.index') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+        All Certificates
+    </a>
+</div>
+{% endblock %}

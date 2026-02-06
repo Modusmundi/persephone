@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Import Certificate - AuthTest{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{{ url_for('certs.index') }}" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to Certificates
+    </a>
+</div>
+
+<h1 class="text-2xl font-bold mb-6">Import Certificate</h1>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 max-w-2xl">
+    <form method="POST" action="{{ url_for('certs.import_cert') }}" enctype="multipart/form-data">
+        <!-- Certificate Name -->
+        <div class="mb-4">
+            <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Certificate Name</label>
+            <input type="text" id="name" name="name" value="imported" required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                pattern="[a-zA-Z0-9_-]+" title="Only letters, numbers, underscores, and hyphens">
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Name for the imported certificate (used for file names).
+            </p>
+        </div>
+
+        <!-- Certificate File -->
+        <div class="mb-4">
+            <label for="cert_file" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Certificate File</label>
+            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-500 dark:hover:border-blue-400 transition-colors">
+                <div class="space-y-1 text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <div class="flex text-sm text-gray-600 dark:text-gray-400">
+                        <label for="cert_file" class="relative cursor-pointer rounded-md font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 focus-within:outline-none">
+                            <span>Upload certificate</span>
+                            <input id="cert_file" name="cert_file" type="file" class="sr-only" accept=".crt,.pem,.cer,.p12,.pfx" required>
+                        </label>
+                        <p class="pl-1">or drag and drop</p>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        PEM (.crt, .pem, .cer) or PKCS#12 (.p12, .pfx)
+                    </p>
+                </div>
+            </div>
+            <p id="cert_file_name" class="mt-2 text-sm text-gray-500 dark:text-gray-400 hidden"></p>
+        </div>
+
+        <!-- Private Key File (for PEM) -->
+        <div class="mb-4" id="key_file_section">
+            <label for="key_file" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Private Key File (PEM only)</label>
+            <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:border-blue-500 dark:hover:border-blue-400 transition-colors">
+                <div class="space-y-1 text-center">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                    </svg>
+                    <div class="flex text-sm text-gray-600 dark:text-gray-400">
+                        <label for="key_file" class="relative cursor-pointer rounded-md font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 focus-within:outline-none">
+                            <span>Upload private key</span>
+                            <input id="key_file" name="key_file" type="file" class="sr-only" accept=".key,.pem">
+                        </label>
+                        <p class="pl-1">or drag and drop</p>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        PEM format (.key, .pem) - Optional for certificate-only imports
+                    </p>
+                </div>
+            </div>
+            <p id="key_file_name" class="mt-2 text-sm text-gray-500 dark:text-gray-400 hidden"></p>
+        </div>
+
+        <!-- Password -->
+        <div class="mb-4">
+            <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password (if encrypted)</label>
+            <input type="password" id="password" name="password"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Required for PKCS#12 files and encrypted private keys.
+            </p>
+        </div>
+
+        <!-- Overwrite Option -->
+        <div class="mb-6">
+            <label class="flex items-center">
+                <input type="checkbox" name="force" class="form-checkbox text-blue-600 rounded">
+                <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Overwrite if certificate already exists</span>
+            </label>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex justify-end space-x-3">
+            <a href="{{ url_for('certs.index') }}" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancel
+            </a>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                Import Certificate
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">PEM Format</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+            Upload a certificate file (.crt, .pem, .cer) and optionally a private key file (.key).
+            Common for certificates obtained from CAs or exported from other systems.
+        </p>
+    </div>
+    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+        <h3 class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">PKCS#12 Format</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+            Upload a .p12 or .pfx file that contains both the certificate and private key.
+            Common for certificates exported from Windows or Java keystores.
+        </p>
+    </div>
+</div>
+
+<script>
+// Show selected file names
+document.getElementById('cert_file').addEventListener('change', function(e) {
+    const name = e.target.files[0]?.name;
+    const display = document.getElementById('cert_file_name');
+    if (name) {
+        display.textContent = 'Selected: ' + name;
+        display.classList.remove('hidden');
+
+        // Show/hide key section based on file type
+        const keySection = document.getElementById('key_file_section');
+        if (name.endsWith('.p12') || name.endsWith('.pfx')) {
+            keySection.style.display = 'none';
+        } else {
+            keySection.style.display = 'block';
+        }
+    } else {
+        display.classList.add('hidden');
+    }
+});
+
+document.getElementById('key_file').addEventListener('change', function(e) {
+    const name = e.target.files[0]?.name;
+    const display = document.getElementById('key_file_name');
+    if (name) {
+        display.textContent = 'Selected: ' + name;
+        display.classList.remove('hidden');
+    } else {
+        display.classList.add('hidden');
+    }
+});
+</script>
+{% endblock %}
