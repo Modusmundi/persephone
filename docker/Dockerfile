@@ -52,4 +52,4 @@ RUN mkdir -p /home/authtest/.authtest
 EXPOSE 8443
 
 # Default command
-CMD ["authtest", "run", "--host", "0.0.0.0", "--port", "8443"]
+CMD ["authtest", "serve", "--host", "0.0.0.0", "--port", "8443"]

@@ -654,3 +654,28 @@ after each iteration and it's included in prompts for context.
   - Critical claims (sub, iss, aud, exp, iat, email, name) are flagged as regressions when removed
 ---
 
+## 2026-02-06 - US-027
+- **What was implemented**: Docker packaging for consistent deployment
+- **Files modified/created**:
+  - `docker/Dockerfile` - Fixed command from `authtest run` to `authtest serve`
+  - `docker/docker-compose.yml` - Fixed env var from `APP_DB_KEY` to `AUTHTEST_DB_KEY`, added `AUTHTEST_CONFIG_DIR`
+  - `.dockerignore` (NEW) - Build optimization to exclude unnecessary files
+- **Features verified**:
+  - Multi-stage Dockerfile for optimized image size (build stage + runtime stage)
+  - Docker Compose for simplified setup with single `docker-compose up -d`
+  - Volume mounts for persistent data (`authtest-data`) and certificates (`./certs`)
+  - Environment variable configuration (`AUTHTEST_DB_KEY`, `AUTHTEST_CONFIG_DIR`, `FLASK_ENV`)
+  - WeasyPrint dependencies included in runtime stage for PDF generation
+  - Non-root user (authtest) for security
+- **Acceptance Criteria Met**:
+  - [x] Multi-stage Dockerfile for optimized image size
+  - [x] Docker Compose for simplified setup
+  - [x] Volume mounts for persistent data and certificates
+  - [x] Environment variable configuration
+- **Learnings:**
+  - Docker command must match CLI exactly (`authtest serve` not `authtest run`)
+  - Environment variable names must match codebase (`AUTHTEST_DB_KEY` not `APP_DB_KEY`)
+  - WeasyPrint requires pango, pangocairo, gdk-pixbuf, shared-mime-info in runtime image
+  - .dockerignore improves build speed by excluding .venv, .git, docs, tests, etc.
+---
+

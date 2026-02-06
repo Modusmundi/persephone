@@ -11,7 +11,8 @@ services:
       - authtest-data:/home/authtest/.authtest
       - ./certs:/app/certs:ro
     environment:
-      - APP_DB_KEY=${APP_DB_KEY:-}
+      - AUTHTEST_DB_KEY=${AUTHTEST_DB_KEY:-}
+      - AUTHTEST_CONFIG_DIR=/home/authtest/.authtest
       - FLASK_ENV=${FLASK_ENV:-production}
     restart: unless-stopped
 
