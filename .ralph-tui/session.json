@@ -3,10 +3,10 @@
   "sessionId": "25d82f5e-e3a0-4aea-88db-13c8150ce3e5",
   "status": "running",
   "startedAt": "2026-02-06T01:00:16.143Z",
-  "updatedAt": "2026-02-06T01:20:10.775Z",
-  "currentIteration": 3,
+  "updatedAt": "2026-02-06T01:22:12.584Z",
+  "currentIteration": 4,
   "maxIterations": 10,
-  "tasksCompleted": 3,
+  "tasksCompleted": 4,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -44,6 +44,16 @@
       "durationMs": 253471,
       "startedAt": "2026-02-06T01:10:08.725Z",
       "endedAt": "2026-02-06T01:14:22.196Z"
+    },
+    {
+      "iteration": 4,
+      "status": "completed",
+      "taskId": "US-014",
+      "taskTitle": "OIDC token decoding and validation",
+      "taskCompleted": true,
+      "durationMs": 347432,
+      "startedAt": "2026-02-06T01:14:23.340Z",
+      "endedAt": "2026-02-06T01:20:10.772Z"
     }
   ],
   "skippedTaskIds": [],

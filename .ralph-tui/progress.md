@@ -34,6 +34,16 @@ after each iteration and it's included in prompts for context.
 
 ---
 
+### OIDC Discovery Pattern
+- Discovery module in `authtest/idp_presets/discovery.py` with `fetch_oidc_discovery()` and `OIDCDiscoveryResult`
+- Auto-appends `.well-known/openid-configuration` path if not present in URL
+- Returns all standard OIDC endpoints plus `raw_config` for custom fields
+- CLI `idp discover` command supports auto-detection (SAML vs OIDC) and both JSON/text output
+- `from-preset --discover` flag auto-populates endpoints during IdP creation
+- Discovery results integrated with IdP storage model fields (issuer, authorization_endpoint, token_endpoint, userinfo_endpoint, jwks_uri)
+
+---
+
 ## 2026-02-05 - US-011
 - **What was implemented**: Keycloak IdP preset was already fully implemented
 - **Files verified**:
@@ -109,5 +119,25 @@ after each iteration and it's included in prompts for context.
   - Access token validation may differ from ID token (audience claim semantics differ)
   - ValidationStatus enum uses StrEnum for easy serialization/display
   - Template globals via `@blueprint.app_template_global()` for reusable template functions
+---
+
+## 2026-02-05 - US-015
+- **What was implemented**: OIDC Discovery integration was already fully implemented
+- **Files verified**:
+  - `authtest/idp_presets/discovery.py` - `fetch_oidc_discovery()`, `OIDCDiscoveryResult` dataclass with all OIDC endpoints
+  - `authtest/idp_presets/__init__.py` - Exports discovery functions
+  - `authtest/cli/config.py` - `idp discover` command with auto-detection and JSON output, `from-preset --discover` for auto-population
+  - `authtest/core/oidc/validation.py` - `TokenValidator` uses `jwks_uri` for signature validation
+- **Features present**:
+  - Fetches `.well-known/openid-configuration` (auto-appends path if needed)
+  - Auto-populates: issuer, authorization_endpoint, token_endpoint, userinfo_endpoint, jwks_uri, end_session_endpoint, revocation_endpoint, introspection_endpoint
+  - Retrieves scopes_supported, response_types_supported, grant_types_supported
+  - CLI display in both human-readable and JSON formats
+  - Preserves raw_config for custom IdP fields
+- **Learnings:**
+  - Discovery was implemented as part of US-011 (Keycloak preset) foundation
+  - URL handling auto-appends well-known path if not present
+  - httpx client used for HTTP requests with configurable SSL verification
+  - Discovery data seamlessly integrates with IdP storage model fields
 ---
 
