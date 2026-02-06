@@ -1,17 +1,68 @@
 """OIDC client implementation.
 
 Provides a client for interacting with OIDC/OAuth2 providers,
-supporting the Authorization Code flow.
+supporting the Authorization Code flow with optional PKCE.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import secrets
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import httpx
+
+
+def generate_code_verifier(length: int = 64) -> str:
+    """Generate a PKCE code verifier.
+
+    The code verifier is a high-entropy cryptographic random string
+    between 43 and 128 characters, using unreserved URI characters.
+
+    Args:
+        length: Length of the verifier (43-128, default 64).
+
+    Returns:
+        URL-safe base64-encoded random string.
+    """
+    # Clamp length to valid range per RFC 7636
+    length = max(43, min(128, length))
+    # Generate random bytes and encode as URL-safe base64
+    # We need enough bytes to get the desired length after encoding
+    num_bytes = (length * 3) // 4 + 1
+    random_bytes = secrets.token_bytes(num_bytes)
+    verifier = base64.urlsafe_b64encode(random_bytes).decode("ascii")
+    # Strip padding and truncate to exact length
+    return verifier.rstrip("=")[:length]
+
+
+def generate_code_challenge(code_verifier: str, method: str = "S256") -> str:
+    """Generate a PKCE code challenge from a code verifier.
+
+    Args:
+        code_verifier: The code verifier string.
+        method: Challenge method - "S256" (recommended) or "plain".
+
+    Returns:
+        The code challenge string.
+
+    Raises:
+        ValueError: If method is not supported.
+    """
+    if method == "plain":
+        return code_verifier
+    elif method == "S256":
+        # SHA256 hash the verifier, then base64url encode
+        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+        challenge = base64.urlsafe_b64encode(digest).decode("ascii")
+        # Remove padding
+        return challenge.rstrip("=")
+    else:
+        raise ValueError(f"Unsupported code_challenge_method: {method}")
+
 
 if TYPE_CHECKING:
     from authtest.storage.models import IdPProvider
@@ -84,6 +135,7 @@ class AuthorizationRequest:
     nonce: str
     code_verifier: str | None = None  # For PKCE
     code_challenge: str | None = None  # For PKCE
+    code_challenge_method: str | None = None  # For PKCE (S256 or plain)
 
 
 @dataclass
@@ -173,6 +225,8 @@ class OIDCClient:
         nonce: str | None = None,
         prompt: str | None = None,
         login_hint: str | None = None,
+        use_pkce: bool = False,
+        code_challenge_method: str = "S256",
         additional_params: dict[str, str] | None = None,
     ) -> AuthorizationRequest:
         """Create an authorization request URL.
@@ -182,6 +236,8 @@ class OIDCClient:
             nonce: OIDC nonce parameter (generated if not provided).
             prompt: OIDC prompt parameter (none, login, consent, select_account).
             login_hint: OIDC login_hint parameter.
+            use_pkce: Whether to use PKCE (Proof Key for Code Exchange).
+            code_challenge_method: PKCE method - "S256" (recommended) or "plain".
             additional_params: Additional query parameters.
 
         Returns:
@@ -199,6 +255,15 @@ class OIDCClient:
             "nonce": nonce,
         }
 
+        # Generate PKCE parameters if enabled
+        code_verifier: str | None = None
+        code_challenge: str | None = None
+        if use_pkce:
+            code_verifier = generate_code_verifier()
+            code_challenge = generate_code_challenge(code_verifier, code_challenge_method)
+            params["code_challenge"] = code_challenge
+            params["code_challenge_method"] = code_challenge_method
+
         if prompt:
             params["prompt"] = prompt
 
@@ -214,6 +279,9 @@ class OIDCClient:
             authorization_url=authorization_url,
             state=state,
             nonce=nonce,
+            code_verifier=code_verifier,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method if use_pkce else None,
         )
 
     def exchange_code(

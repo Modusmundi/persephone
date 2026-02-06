@@ -6,6 +6,8 @@ from authtest.core.oidc.client import (
     OIDCClientConfig,
     TokenResponse,
     UserInfoResponse,
+    generate_code_challenge,
+    generate_code_verifier,
 )
 from authtest.core.oidc.flows import (
     AuthorizationCodeFlow,
@@ -31,6 +33,8 @@ __all__ = [
     "OIDCClientConfig",
     "TokenResponse",
     "UserInfoResponse",
+    "generate_code_challenge",
+    "generate_code_verifier",
     # Flows
     "AuthorizationCodeFlow",
     "OIDCFlowResult",

@@ -92,6 +92,8 @@ class OIDCFlowState:
     state: str | None = None
     nonce: str | None = None
     code_verifier: str | None = None  # For PKCE
+    code_challenge: str | None = None  # For PKCE
+    code_challenge_method: str | None = None  # For PKCE (S256 or plain)
 
     # Timing
     started_at: datetime | None = None
@@ -128,6 +130,8 @@ class OIDCFlowState:
             "state": self.state,
             "nonce": self.nonce,
             "code_verifier": self.code_verifier,
+            "code_challenge": self.code_challenge,
+            "code_challenge_method": self.code_challenge_method,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "preflight": _preflight_to_dict(self.preflight) if self.preflight else None,
@@ -135,7 +139,9 @@ class OIDCFlowState:
             "token_response": _token_response_to_dict(self.token_response) if self.token_response else None,
             "userinfo_response": _userinfo_to_dict(self.userinfo_response) if self.userinfo_response else None,
             "id_token_decoded": _decoded_token_to_dict(self.id_token_decoded) if self.id_token_decoded else None,
-            "access_token_decoded": _decoded_token_to_dict(self.access_token_decoded) if self.access_token_decoded else None,
+            "access_token_decoded": _decoded_token_to_dict(self.access_token_decoded)
+            if self.access_token_decoded
+            else None,
             "error": self.error,
             "error_description": self.error_description,
             "options": self.options,
@@ -156,6 +162,8 @@ class OIDCFlowState:
             state=data.get("state"),
             nonce=data.get("nonce"),
             code_verifier=data.get("code_verifier"),
+            code_challenge=data.get("code_challenge"),
+            code_challenge_method=data.get("code_challenge_method"),
             started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
             completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
             preflight=_dict_to_preflight(data["preflight"]) if data.get("preflight") else None,
@@ -467,21 +475,15 @@ class AuthorizationCodeFlow:
 
         # Check for client secret (confidential client)
         if not self.client_secret:
-            warnings.append(
-                "No client secret configured. This is only valid for public clients using PKCE."
-            )
+            warnings.append("No client secret configured. This is only valid for public clients using PKCE.")
 
         # Check userinfo endpoint (optional)
         if not self.client_config.userinfo_endpoint:
-            warnings.append(
-                "UserInfo endpoint not configured. User claims will only be available from ID token."
-            )
+            warnings.append("UserInfo endpoint not configured. User claims will only be available from ID token.")
 
         # Check JWKS URI (optional but recommended)
         if not self.client_config.jwks_uri:
-            warnings.append(
-                "JWKS URI not configured. Token signature verification will not be available."
-            )
+            warnings.append("JWKS URI not configured. Token signature verification will not be available.")
 
         all_passed = all(c.passed for c in checks)
 
@@ -511,10 +513,16 @@ class AuthorizationCodeFlow:
             state.error = "Pre-flight checks failed"
             return state, ""
 
+        # Get PKCE options from state
+        use_pkce = state.options.get("use_pkce", False)
+        code_challenge_method = state.options.get("code_challenge_method", "S256")
+
         # Create authorization request
         auth_request: AuthorizationRequest = self.client.create_authorization_request(
             prompt=state.options.get("prompt"),
             login_hint=state.options.get("login_hint"),
+            use_pkce=use_pkce,
+            code_challenge_method=code_challenge_method,
         )
 
         # Update state
@@ -522,6 +530,8 @@ class AuthorizationCodeFlow:
         state.state = auth_request.state
         state.nonce = auth_request.nonce
         state.code_verifier = auth_request.code_verifier
+        state.code_challenge = auth_request.code_challenge
+        state.code_challenge_method = auth_request.code_challenge_method
 
         return state, auth_request.authorization_url
 
@@ -551,9 +561,7 @@ class AuthorizationCodeFlow:
         if returned_state and returned_state != state.state:
             state.status = OIDCFlowStatus.FAILED
             state.error = "state_mismatch"
-            state.error_description = (
-                f"State parameter mismatch. Expected: {state.state}, Got: {returned_state}"
-            )
+            state.error_description = f"State parameter mismatch. Expected: {state.state}, Got: {returned_state}"
             return state
 
         # Handle error response
@@ -595,8 +603,7 @@ class AuthorizationCodeFlow:
                 state.status = OIDCFlowStatus.FAILED
                 state.error = "nonce_mismatch"
                 state.error_description = (
-                    f"Nonce mismatch in ID token. Expected: {state.nonce}, "
-                    f"Got: {state.id_token_decoded.nonce}"
+                    f"Nonce mismatch in ID token. Expected: {state.nonce}, Got: {state.id_token_decoded.nonce}"
                 )
                 return state
 
@@ -650,6 +657,13 @@ class AuthorizationCodeFlow:
             "options": state.options,
         }
 
+        # Add PKCE info if used
+        if state.code_verifier:
+            request_data["pkce"] = {
+                "used": True,
+                "code_challenge_method": state.code_challenge_method,
+            }
+
         # Build response data
         response_data: dict[str, Any] = {}
         if state.token_response:
@@ -661,9 +675,14 @@ class AuthorizationCodeFlow:
         if state.userinfo_response:
             response_data["userinfo"] = _userinfo_to_dict(state.userinfo_response)
 
+        # Determine test name based on PKCE usage
+        test_name = "Authorization Code Flow"
+        if state.code_verifier:
+            test_name = f"Authorization Code Flow + PKCE ({state.code_challenge_method or 'S256'})"
+
         result = TestResult(
             idp_provider_id=state.idp_id,
-            test_name="Authorization Code Flow",
+            test_name=test_name,
             test_type="oidc",
             status=outcome.value,
             error_message=state.error_description or state.error,

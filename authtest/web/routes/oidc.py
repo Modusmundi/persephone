@@ -198,9 +198,13 @@ def authorization_code() -> str | WerkzeugResponse:
         # Get options from form
         prompt = request.form.get("prompt") or None
         login_hint = request.form.get("login_hint") or None
+        use_pkce = request.form.get("use_pkce") == "on"
+        code_challenge_method = request.form.get("code_challenge_method", "S256")
 
         state.options["prompt"] = prompt
         state.options["login_hint"] = login_hint
+        state.options["use_pkce"] = use_pkce
+        state.options["code_challenge_method"] = code_challenge_method
 
         # Create authorization request
         state, authorization_url = flow.create_authorization_request(state)

@@ -61,3 +61,20 @@ after each iteration and it's included in prompts for context.
   - Template filters for timestamp conversion registered on blueprint
 ---
 
+## 2026-02-05 - US-013
+- **What was implemented**: OIDC Authorization Code + PKCE flow
+- **Files modified**:
+  - `authtest/core/oidc/client.py` - Added `generate_code_verifier()` and `generate_code_challenge()` functions, updated `create_authorization_request()` with `use_pkce` and `code_challenge_method` parameters
+  - `authtest/core/oidc/flows.py` - Added `code_challenge` and `code_challenge_method` fields to OIDCFlowState, updated `create_authorization_request()` to pass PKCE options, PKCE info included in recorded test results
+  - `authtest/core/oidc/__init__.py` - Exported PKCE utility functions
+  - `authtest/web/routes/oidc.py` - Added form field handling for `use_pkce` checkbox and `code_challenge_method` select
+  - `authtest/web/templates/oidc/authorization_code.html` - Added PKCE toggle checkbox with S256/plain method selector
+  - `authtest/web/templates/oidc/result.html` - Added PKCE badge in timeline when PKCE was used
+- **Learnings:**
+  - PKCE implementation follows RFC 7636 - verified with official test vector
+  - code_verifier is URL-safe base64 (no + or /), 43-128 chars (default 64)
+  - code_challenge for S256 is SHA-256 hash of verifier, base64url encoded without padding
+  - S256 produces 43-char challenge (256 bits / 6 bits per base64 char ≈ 43)
+  - PKCE is required for public clients (SPAs, mobile apps) but optional for confidential clients
+---
+

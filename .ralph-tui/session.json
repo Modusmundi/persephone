@@ -3,10 +3,10 @@
   "sessionId": "25d82f5e-e3a0-4aea-88db-13c8150ce3e5",
   "status": "running",
   "startedAt": "2026-02-06T01:00:16.143Z",
-  "updatedAt": "2026-02-06T01:10:07.588Z",
-  "currentIteration": 1,
+  "updatedAt": "2026-02-06T01:14:22.199Z",
+  "currentIteration": 2,
   "maxIterations": 10,
-  "tasksCompleted": 1,
+  "tasksCompleted": 2,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -24,6 +24,16 @@
       "durationMs": 105299,
       "startedAt": "2026-02-06T01:00:27.047Z",
       "endedAt": "2026-02-06T01:02:12.346Z"
+    },
+    {
+      "iteration": 2,
+      "status": "completed",
+      "taskId": "US-012",
+      "taskTitle": "OIDC Authorization Code flow",
+      "taskCompleted": true,
+      "durationMs": 474089,
+      "startedAt": "2026-02-06T01:02:13.496Z",
+      "endedAt": "2026-02-06T01:10:07.585Z"
     }
   ],
   "skippedTaskIds": [],

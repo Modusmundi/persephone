@@ -170,7 +170,14 @@
                     <div class="timeline-dot completed"></div>
                     <div>
                         <p class="font-medium">Redirected to IdP</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400">User authenticated at identity provider</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">
+                            User authenticated at identity provider
+                            {% if state.code_verifier %}
+                            <span class="inline-block ml-2 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded text-xs">
+                                PKCE ({{ state.code_challenge_method or 'S256' }})
+                            </span>
+                            {% endif %}
+                        </p>
                     </div>
                 </div>
                 {% endif %}
