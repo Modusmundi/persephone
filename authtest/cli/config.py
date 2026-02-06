@@ -704,7 +704,7 @@ def idp_show(name: str, output_json: bool) -> None:
 @click.argument("name")
 @click.option(
     "--preset",
-    type=click.Choice(["keycloak"]),
+    type=click.Choice(["keycloak", "okta"]),
     required=True,
     help="IdP preset to use",
 )
@@ -715,8 +715,11 @@ def idp_show(name: str, output_json: bool) -> None:
     default="saml",
     help="Protocol type (default: saml)",
 )
-@click.option("--base-url", required=True, help="IdP server base URL")
+@click.option("--base-url", help="IdP server base URL (Keycloak) or Okta domain")
 @click.option("--realm", help="Keycloak realm name (required for keycloak preset)")
+@click.option("--okta-domain", help="Okta domain (e.g., dev-123456.okta.com)")
+@click.option("--app-id", help="Okta SAML app ID (optional, for app-specific URLs)")
+@click.option("--authorization-server", default="default", help="Okta authorization server ID (default: 'default')")
 @click.option("--display-name", help="Display name for the IdP")
 @click.option("--discover/--no-discover", default=True, help="Auto-discover and fetch metadata/config")
 @json_option
@@ -724,8 +727,11 @@ def idp_from_preset(
     name: str,
     preset: str,
     idp_type: str,
-    base_url: str,
+    base_url: str | None,
     realm: str | None,
+    okta_domain: str | None,
+    app_id: str | None,
+    authorization_server: str,
     display_name: str | None,
     discover: bool,
     output_json: bool,
@@ -733,7 +739,7 @@ def idp_from_preset(
     """Add an Identity Provider from a preset configuration.
 
     This command creates an IdP configuration using pre-defined templates
-    for common identity providers like Keycloak.
+    for common identity providers like Keycloak and Okta.
 
     Examples:
 
@@ -750,6 +756,19 @@ def idp_from_preset(
             --base-url https://keycloak.example.com \\
             --realm myrealm
 
+        # Add Okta OIDC IdP
+        authtest config idp from-preset my-okta \\
+            --preset okta \\
+            --type oidc \\
+            --okta-domain dev-123456.okta.com
+
+        # Add Okta SAML IdP with app ID
+        authtest config idp from-preset my-okta-saml \\
+            --preset okta \\
+            --type saml \\
+            --okta-domain dev-123456.okta.com \\
+            --app-id exk12345
+
         # Add without fetching metadata
         authtest config idp from-preset my-keycloak \\
             --preset keycloak \\
@@ -760,8 +779,17 @@ def idp_from_preset(
     from authtest.storage import Database, IdPProvider, KeyNotFoundError
 
     # Validate preset-specific requirements
-    if preset == "keycloak" and not realm:
-        error_result("--realm is required for the keycloak preset.", output_json)
+    if preset == "keycloak":
+        if not base_url:
+            error_result("--base-url is required for the keycloak preset.", output_json)
+        if not realm:
+            error_result("--realm is required for the keycloak preset.", output_json)
+    elif preset == "okta":
+        if not okta_domain and not base_url:
+            error_result("--okta-domain (or --base-url) is required for the okta preset.", output_json)
+        # Allow base-url as fallback for okta-domain
+        if not okta_domain:
+            okta_domain = base_url
 
     try:
         database = Database()
@@ -783,6 +811,18 @@ def idp_from_preset(
                 if idp_type == "saml"
                 else get_oidc_preset(base_url, realm)  # type: ignore[arg-type]
             )
+        elif preset == "okta":
+            from authtest.idp_presets.okta import (
+                get_oidc_preset as get_okta_oidc_preset,
+            )
+            from authtest.idp_presets.okta import (
+                get_saml_preset as get_okta_saml_preset,
+            )
+
+            if idp_type == "saml":
+                preset_config = get_okta_saml_preset(okta_domain, app_id)  # type: ignore[arg-type]
+            else:
+                preset_config = get_okta_oidc_preset(okta_domain, authorization_server)  # type: ignore[arg-type]
         else:
             session.close()
             database.close()
@@ -916,13 +956,14 @@ def idp_from_preset(
 @idp.command("setup-guide")
 @click.option(
     "--preset",
-    type=click.Choice(["keycloak"]),
+    type=click.Choice(["keycloak", "okta"]),
     required=True,
     help="IdP preset for setup guide",
 )
 @click.option("--base-url", help="IdP server base URL (for customized URLs)")
 @click.option("--realm", help="Keycloak realm name (for customized URLs)")
-def idp_setup_guide(preset: str, base_url: str | None, realm: str | None) -> None:
+@click.option("--okta-domain", help="Okta domain (for customized URLs)")
+def idp_setup_guide(preset: str, base_url: str | None, realm: str | None, okta_domain: str | None) -> None:
     """Show setup guide for an IdP preset.
 
     Displays step-by-step instructions for configuring the IdP to work
@@ -933,15 +974,29 @@ def idp_setup_guide(preset: str, base_url: str | None, realm: str | None) -> Non
         # Show Keycloak setup guide
         authtest config idp setup-guide --preset keycloak
 
-        # Show guide with customized URLs
+        # Show Keycloak guide with customized URLs
         authtest config idp setup-guide --preset keycloak \\
             --base-url https://keycloak.example.com \\
             --realm myrealm
+
+        # Show Okta setup guide
+        authtest config idp setup-guide --preset okta
+
+        # Show Okta guide with customized domain
+        authtest config idp setup-guide --preset okta \\
+            --okta-domain dev-123456.okta.com
     """
     if preset == "keycloak":
         from authtest.idp_presets.keycloak import get_setup_guide
 
         guide = get_setup_guide(base_url, realm)
+        click.echo(guide)
+    elif preset == "okta":
+        from authtest.idp_presets.okta import get_setup_guide as get_okta_setup_guide
+
+        # Support both --okta-domain and --base-url for convenience
+        domain = okta_domain or base_url
+        guide = get_okta_setup_guide(domain)
         click.echo(guide)
     else:
         raise click.ClickException(f"Unknown preset: {preset}")

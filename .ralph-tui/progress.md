@@ -141,3 +141,24 @@ after each iteration and it's included in prompts for context.
   - Discovery data seamlessly integrates with IdP storage model fields
 ---
 
+## 2026-02-05 - US-016
+- **What was implemented**: Okta IdP preset with OIDC and SAML support
+- **Files created/modified**:
+  - `authtest/idp_presets/okta.py` - Full implementation with OktaConfig dataclass, get_saml_preset(), get_oidc_preset(), OKTA_SETUP_GUIDE, get_setup_guide()
+  - `authtest/idp_presets/__init__.py` - Added Okta exports and PRESETS registry entry with 'okta' key
+  - `authtest/cli/config.py` - Updated `from-preset` and `setup-guide` commands to support Okta with options: --okta-domain, --app-id, --authorization-server
+- **Features implemented**:
+  - OktaConfig dataclass with all OIDC and SAML endpoints as properties
+  - URL normalization (auto-adds https:// if missing)
+  - OIDC support with three authorization server modes: 'default', 'org', or custom server ID
+  - SAML support with optional app_id for app-specific URLs
+  - Comprehensive setup guide with OIDC and SAML configuration instructions
+  - CLI integration with full preset workflow support
+- **Learnings:**
+  - Okta has two types of authorization servers: Org (limited scopes) vs Custom/Default (full scopes)
+  - Org auth server uses different URL pattern (no /oauth2/{server} prefix)
+  - SAML in Okta requires app-specific SSO URLs that include the app ID
+  - Okta SAML metadata is per-app, not org-level like OIDC discovery
+  - Default name_id_format for Okta SAML is emailAddress, unlike Keycloak's persistent
+---
+

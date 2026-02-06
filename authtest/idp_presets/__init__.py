@@ -6,7 +6,7 @@ configuration endpoints.
 
 Available presets:
 - keycloak: Red Hat Keycloak / RH-SSO
-- okta: Okta Identity (TODO)
+- okta: Okta Identity
 
 Discovery functions:
 - fetch_saml_metadata: Fetch and parse SAML IdP metadata
@@ -23,9 +23,28 @@ from authtest.idp_presets.discovery import (
 from authtest.idp_presets.keycloak import (
     KEYCLOAK_SETUP_GUIDE,
     KeycloakConfig,
-    get_oidc_preset,
-    get_saml_preset,
-    get_setup_guide,
+)
+from authtest.idp_presets.keycloak import (
+    get_oidc_preset as get_keycloak_oidc_preset,
+)
+from authtest.idp_presets.keycloak import (
+    get_saml_preset as get_keycloak_saml_preset,
+)
+from authtest.idp_presets.keycloak import (
+    get_setup_guide as get_keycloak_setup_guide,
+)
+from authtest.idp_presets.okta import (
+    OKTA_SETUP_GUIDE,
+    OktaConfig,
+)
+from authtest.idp_presets.okta import (
+    get_oidc_preset as get_okta_oidc_preset,
+)
+from authtest.idp_presets.okta import (
+    get_saml_preset as get_okta_saml_preset,
+)
+from authtest.idp_presets.okta import (
+    get_setup_guide as get_okta_setup_guide,
 )
 
 __all__ = [
@@ -37,10 +56,16 @@ __all__ = [
     "parse_saml_metadata",
     # Keycloak preset
     "KeycloakConfig",
-    "get_saml_preset",
-    "get_oidc_preset",
-    "get_setup_guide",
+    "get_keycloak_saml_preset",
+    "get_keycloak_oidc_preset",
+    "get_keycloak_setup_guide",
     "KEYCLOAK_SETUP_GUIDE",
+    # Okta preset
+    "OktaConfig",
+    "get_okta_saml_preset",
+    "get_okta_oidc_preset",
+    "get_okta_setup_guide",
+    "OKTA_SETUP_GUIDE",
 ]
 
 
@@ -53,8 +78,15 @@ PRESETS = {
         "requires": ["base_url", "realm"],
         "supports": ["saml", "oidc"],
     },
+    "okta": {
+        "name": "Okta",
+        "description": "Okta Identity cloud platform",
+        "module": "authtest.idp_presets.okta",
+        "requires": ["okta_domain"],
+        "optional": ["app_id", "authorization_server"],
+        "supports": ["saml", "oidc"],
+    },
     # Future presets
-    # "okta": {...},
     # "azure_ad": {...},
     # "auth0": {...},
 }
