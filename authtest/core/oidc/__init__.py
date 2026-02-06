@@ -11,6 +11,7 @@ from authtest.core.oidc.client import (
 )
 from authtest.core.oidc.flows import (
     AuthorizationCodeFlow,
+    ClientCredentialsFlow,
     OIDCFlowResult,
     OIDCFlowState,
     OIDCFlowStatus,
@@ -45,6 +46,7 @@ __all__ = [
     "generate_code_verifier",
     # Flows
     "AuthorizationCodeFlow",
+    "ClientCredentialsFlow",
     "OIDCFlowResult",
     "OIDCFlowState",
     "OIDCFlowStatus",

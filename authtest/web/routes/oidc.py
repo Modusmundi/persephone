@@ -19,7 +19,12 @@ from flask import (
 if TYPE_CHECKING:
     from werkzeug.wrappers import Response as WerkzeugResponse
 
-from authtest.core.oidc.flows import AuthorizationCodeFlow, OIDCFlowState, OIDCFlowStatus
+from authtest.core.oidc.flows import (
+    AuthorizationCodeFlow,
+    ClientCredentialsFlow,
+    OIDCFlowState,
+    OIDCFlowStatus,
+)
 from authtest.storage.database import get_database
 from authtest.storage.models import ClientConfig, IdPProvider, IdPType
 
@@ -350,4 +355,132 @@ def cancel() -> WerkzeugResponse:
     """Cancel an in-progress flow."""
     session.pop(OIDC_FLOW_STATE_KEY, None)
     flash("OIDC test cancelled", "info")
+    return redirect(url_for("oidc.index"))
+
+
+# Session key for client credentials flow state
+OIDC_CC_FLOW_STATE_KEY = "oidc_cc_flow_state"
+
+
+@oidc_bp.route("/client-credentials", methods=["GET", "POST"])
+def client_credentials() -> str | WerkzeugResponse:
+    """Client Credentials flow test page."""
+    if request.method == "GET":
+        # Show IdP selection or preflight if IdP already selected
+        idp_id = request.args.get("idp_id", type=int)
+        if not idp_id:
+            return redirect(url_for("oidc.index"))
+
+        db = get_database()
+        db_session = db.get_session()
+
+        try:
+            idp = db_session.query(IdPProvider).get(idp_id)
+            if not idp or idp.idp_type != IdPType.OIDC:
+                flash("Invalid IdP selected", "error")
+                return redirect(url_for("oidc.index"))
+
+            # Get client credentials
+            client_id, client_secret = get_client_config(idp)
+
+            if not client_id:
+                flash(
+                    "No client credentials configured for this IdP. "
+                    "Please configure client_id in IdP settings or create a Client Config.",
+                    "error",
+                )
+                return redirect(url_for("oidc.index"))
+
+            if not client_secret:
+                flash(
+                    "Client secret is required for the Client Credentials flow. "
+                    "Please configure client_secret in IdP settings or Client Config.",
+                    "error",
+                )
+                return redirect(url_for("oidc.index"))
+
+            # Start the flow and run preflight checks
+            flow = ClientCredentialsFlow(
+                idp=idp,
+                db=db,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+            state = flow.start_flow()
+
+            # Store state in session
+            session[OIDC_CC_FLOW_STATE_KEY] = state.to_dict()
+
+            # Get default scopes (without 'openid')
+            default_scopes = [s for s in (idp.settings.get("default_scopes", ["openid", "profile", "email"]) if idp.settings else ["openid", "profile", "email"]) if s != "openid"]
+
+            return render_template(
+                "oidc/client_credentials.html",
+                idp=idp,
+                state=state,
+                preflight=state.preflight,
+                default_scopes=default_scopes,
+            )
+        finally:
+            db_session.close()
+
+    # POST - user confirmed, execute the flow
+    state_dict = session.get(OIDC_CC_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active flow found", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = OIDCFlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        # Get client credentials
+        client_id, client_secret = get_client_config(idp)
+
+        flow = ClientCredentialsFlow(
+            idp=idp,
+            db=db,
+            client_id=client_id,
+            client_secret=client_secret or "",
+        )
+
+        # Get scopes from form
+        scopes_input = request.form.get("scopes", "").strip()
+        scopes = scopes_input.split() if scopes_input else None
+
+        # Execute the flow
+        state = flow.execute_flow(state, scopes=scopes)
+
+        # Record the result
+        result_id = flow.record_result(state)
+
+        # Get the flow result for display
+        result = flow.get_flow_result(state)
+
+        # Clear the flow state
+        session.pop(OIDC_CC_FLOW_STATE_KEY, None)
+
+        return render_template(
+            "oidc/client_credentials_result.html",
+            idp=idp,
+            state=state,
+            result=result,
+            result_id=result_id,
+        )
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/client-credentials/cancel", methods=["POST"])
+def cancel_client_credentials() -> WerkzeugResponse:
+    """Cancel an in-progress client credentials flow."""
+    session.pop(OIDC_CC_FLOW_STATE_KEY, None)
+    flash("Client Credentials test cancelled", "info")
     return redirect(url_for("oidc.index"))

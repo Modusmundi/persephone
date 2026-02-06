@@ -791,3 +791,279 @@ class AuthorizationCodeFlow:
             duration_ms=duration_ms,
             summary=summary,
         )
+
+
+class ClientCredentialsFlow:
+    """Orchestrates the OIDC Client Credentials flow.
+
+    This is a machine-to-machine flow that:
+    1. Runs pre-flight checks
+    2. Authenticates using client_id and client_secret
+    3. Retrieves access token directly (no user interaction)
+    4. Decodes and validates the token
+    5. Records test result
+    """
+
+    def __init__(
+        self,
+        idp: IdPProvider,
+        db: Database,
+        client_id: str,
+        client_secret: str,
+        scopes: list[str] | None = None,
+    ) -> None:
+        """Initialize the flow handler.
+
+        Args:
+            idp: Identity Provider configuration.
+            db: Database instance for recording results.
+            client_id: OAuth2 client ID.
+            client_secret: OAuth2 client secret (required for this flow).
+            scopes: Scopes to request (defaults to IdP defaults minus 'openid').
+        """
+        self.idp = idp
+        self.db = db
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.scopes = scopes
+
+        # Create client config
+        self.client_config = OIDCClientConfig.from_idp(
+            idp=idp,
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=scopes,
+        )
+        self.client = OIDCClient(self.client_config)
+
+    def start_flow(self) -> OIDCFlowState:
+        """Start a new Client Credentials flow.
+
+        Returns:
+            OIDCFlowState with preflight results.
+        """
+        flow_id = f"oidc_cc_flow_{secrets.token_hex(16)}"
+
+        # Run pre-flight checks
+        preflight = self._run_preflight_checks()
+
+        state = OIDCFlowState(
+            flow_id=flow_id,
+            idp_id=self.idp.id,
+            idp_name=self.idp.name,
+            status=OIDCFlowStatus.PREFLIGHT,
+            grant_type="client_credentials",
+            client_id=self.client_id,
+            scopes=self.scopes or [s for s in self.client_config.scopes if s != "openid"],
+            started_at=datetime.now(UTC),
+            preflight=preflight,
+        )
+
+        return state
+
+    def _run_preflight_checks(self) -> PreflightResult:
+        """Run pre-flight checks for the Client Credentials flow."""
+        checks = []
+        warnings = []
+
+        # Check token endpoint
+        token_check = PreflightCheck(
+            name="Token Endpoint",
+            description="IdP token endpoint is configured",
+            passed=bool(self.client_config.token_endpoint),
+            details=self.client_config.token_endpoint or "Not configured",
+        )
+        checks.append(token_check)
+
+        # Check client ID
+        client_check = PreflightCheck(
+            name="Client ID",
+            description="OAuth2 client ID is configured",
+            passed=bool(self.client_id),
+            details=self.client_id if self.client_id else "Not configured",
+        )
+        checks.append(client_check)
+
+        # Check client secret (required for this flow)
+        secret_check = PreflightCheck(
+            name="Client Secret",
+            description="OAuth2 client secret is configured (required for client credentials)",
+            passed=bool(self.client_secret),
+            details="Configured" if self.client_secret else "Not configured",
+        )
+        checks.append(secret_check)
+
+        # Check JWKS URI (optional but recommended)
+        if not self.client_config.jwks_uri:
+            warnings.append("JWKS URI not configured. Token signature verification will not be available.")
+
+        all_passed = all(c.passed for c in checks)
+
+        return PreflightResult(
+            checks=checks,
+            all_passed=all_passed,
+            warnings=warnings,
+        )
+
+    def execute_flow(
+        self,
+        state: OIDCFlowState,
+        scopes: list[str] | None = None,
+    ) -> OIDCFlowState:
+        """Execute the Client Credentials flow.
+
+        Args:
+            state: Current flow state.
+            scopes: Optional override for scopes to request.
+
+        Returns:
+            Updated flow state with token response.
+        """
+        if state.status != OIDCFlowStatus.PREFLIGHT:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = "invalid_state"
+            state.error_description = f"Cannot execute flow from state: {state.status}"
+            return state
+
+        if state.preflight and not state.preflight.all_passed:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = "preflight_failed"
+            state.error_description = "Pre-flight checks failed"
+            return state
+
+        state.status = OIDCFlowStatus.EXCHANGING
+
+        # Execute client credentials grant
+        request_scopes = scopes or state.scopes
+        token_response = self.client.client_credentials_grant(scopes=request_scopes)
+        state.token_response = token_response
+        state.completed_at = datetime.now(UTC)
+
+        if not token_response.is_success:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = token_response.error
+            state.error_description = token_response.error_description
+            return state
+
+        # Try to decode access token (may or may not be JWT)
+        if token_response.access_token:
+            decoded = decode_jwt(token_response.access_token)
+            if decoded.is_valid_format:
+                state.access_token_decoded = decoded
+                # Validate access token signature
+                validator = TokenValidator(
+                    jwks_uri=self.client_config.jwks_uri,
+                    issuer=self.client_config.issuer,
+                )
+                state.access_token_validation = validator.validate_token(
+                    token_response.access_token,
+                    validate_signature=True,
+                )
+
+        state.status = OIDCFlowStatus.COMPLETED
+        return state
+
+    def record_result(self, state: OIDCFlowState) -> int:
+        """Record the test result to the database.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            ID of the created TestResult record.
+        """
+        from authtest.storage.models import TestResult
+
+        # Calculate duration
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        # Determine outcome
+        if state.status == OIDCFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+        elif state.status == OIDCFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+        else:
+            outcome = TestOutcome.ERROR
+
+        # Build request data
+        request_data = {
+            "flow_type": state.grant_type,
+            "client_id": state.client_id,
+            "scopes": state.scopes,
+        }
+
+        # Build response data
+        response_data: dict[str, Any] = {}
+        if state.token_response:
+            response_data["token_response"] = _token_response_to_dict(state.token_response)
+        if state.access_token_decoded:
+            response_data["access_token_decoded"] = _decoded_token_to_dict(state.access_token_decoded)
+        if state.access_token_validation:
+            response_data["access_token_validation"] = state.access_token_validation.to_dict()
+
+        result = TestResult(
+            idp_provider_id=state.idp_id,
+            test_name="Client Credentials Flow",
+            test_type="oidc",
+            status=outcome.value,
+            error_message=state.error_description or state.error,
+            started_at=state.started_at or datetime.now(UTC),
+            completed_at=state.completed_at,
+            duration_ms=duration_ms,
+            request_data=request_data,
+            response_data=response_data,
+        )
+
+        session = self.db.get_session()
+        try:
+            session.add(result)
+            session.commit()
+            result_id = result.id
+        finally:
+            session.close()
+
+        return result_id
+
+    def get_flow_result(self, state: OIDCFlowState) -> OIDCFlowResult:
+        """Get the final result of the flow.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            OIDCFlowResult with outcome summary.
+        """
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        if state.status == OIDCFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+
+            # Build summary
+            if state.access_token_decoded and state.access_token_decoded.subject:
+                summary = f"Token issued for client: {state.access_token_decoded.subject}"
+            else:
+                summary = "Access token obtained successfully"
+
+            # Add scope info if available
+            if state.token_response and state.token_response.scope:
+                summary += f" (scopes: {state.token_response.scope})"
+
+        elif state.status == OIDCFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+            summary = state.error_description or state.error or "Token request failed"
+        else:
+            outcome = TestOutcome.ERROR
+            summary = state.error or f"Flow ended in unexpected state: {state.status}"
+
+        return OIDCFlowResult(
+            flow_state=state,
+            outcome=outcome,
+            duration_ms=duration_ms,
+            summary=summary,
+        )

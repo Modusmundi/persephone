@@ -21,8 +21,10 @@ after each iteration and it's included in prompts for context.
 - Flow handlers in `authtest/core/oidc/flows.py` follow same pattern as SAML flows
 - OIDCFlowState dataclass with to_dict()/from_dict() for session storage
 - AuthorizationCodeFlow class orchestrates the flow with start_flow(), create_authorization_request(), process_callback()
+- ClientCredentialsFlow class uses simpler pattern: start_flow() → execute_flow() (no redirects)
 - Web routes in `authtest/web/routes/oidc.py` with blueprint registration in `__init__.py`
 - Client credentials can come from ClientConfig model or IdP.settings['client_id']
+- Different flows share OIDCFlowState but use grant_type field to distinguish
 
 ### JWT Token Validation Pattern
 - Validation module in `authtest/core/oidc/validation.py` with TokenValidator class
@@ -225,5 +227,35 @@ after each iteration and it's included in prompts for context.
   - IdP-initiated SLO requires SP to send LogoutResponse back to IdP after processing
   - SLO flow state follows similar pattern to SSO flow state (stored in Flask session)
   - SP metadata SingleLogoutService must be placed before NameIDFormat elements per SAML schema
+---
+
+## 2026-02-05 - US-019
+- **What was implemented**: OIDC Client Credentials flow for machine-to-machine authentication
+- **Files created/modified**:
+  - `authtest/core/oidc/client.py` - Added `client_credentials_grant()` method to OIDCClient for direct token endpoint requests
+  - `authtest/core/oidc/flows.py` - Added `ClientCredentialsFlow` class following same patterns as AuthorizationCodeFlow
+  - `authtest/core/oidc/__init__.py` - Exported ClientCredentialsFlow
+  - `authtest/web/routes/oidc.py` - Added `/client-credentials` and `/client-credentials/cancel` routes
+  - `authtest/web/templates/oidc/client_credentials.html` (NEW) - Preflight checks and scope configuration UI
+  - `authtest/web/templates/oidc/client_credentials_result.html` (NEW) - Token display with decoded JWT and validation
+  - `authtest/web/templates/oidc/index.html` - Added Client Credentials button, updated PKCE description (already available)
+- **Features implemented**:
+  - Client authenticates with client_id and client_secret directly to token endpoint
+  - Access token retrieved without user interaction (machine-to-machine)
+  - Preflight checks: token endpoint, client_id, client_secret (required)
+  - Configurable scopes (defaults exclude 'openid' since it's user auth)
+  - Access token JWT decoding and signature validation
+  - Full test result recording to database
+  - Web UI with timeline, validation checks, claim display
+- **Acceptance Criteria Met**:
+  - [x] Client authenticates with client_id and client_secret
+  - [x] Retrieves access token without user interaction
+  - [x] Supports various client authentication methods (POST body with credentials)
+- **Learnings:**
+  - Client Credentials grant does NOT return id_token (no user context)
+  - The 'openid' scope is typically not used with client_credentials (it's for user authentication)
+  - Access tokens may or may not be JWTs depending on IdP configuration
+  - Flow is simpler than Authorization Code - no redirects, single POST request
+  - Reused existing OIDCFlowState dataclass with grant_type field to distinguish flows
 ---
 

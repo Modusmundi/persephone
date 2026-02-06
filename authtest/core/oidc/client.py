@@ -440,3 +440,92 @@ class OIDCClient:
             pass
 
         return {}
+
+    def client_credentials_grant(
+        self,
+        scopes: list[str] | None = None,
+        additional_params: dict[str, str] | None = None,
+    ) -> TokenResponse:
+        """Execute the Client Credentials grant to obtain an access token.
+
+        This is a machine-to-machine flow that does not involve user interaction.
+        The client authenticates using its client_id and client_secret.
+
+        Args:
+            scopes: Scopes to request (defaults to client config scopes minus 'openid').
+            additional_params: Additional parameters to include in the request.
+
+        Returns:
+            TokenResponse with access token and metadata.
+        """
+        # Client credentials flow requires client_secret
+        if not self.config.client_secret:
+            return TokenResponse(
+                access_token="",
+                token_type="",
+                error="invalid_client",
+                error_description="Client credentials flow requires a client_secret",
+            )
+
+        # Use provided scopes or default scopes (without 'openid' which is for user auth)
+        request_scopes = scopes
+        if request_scopes is None:
+            request_scopes = [s for s in self.config.scopes if s != "openid"]
+
+        data: dict[str, str] = {
+            "grant_type": "client_credentials",
+            "client_id": self.config.client_id,
+            "client_secret": self.config.client_secret,
+        }
+
+        if request_scopes:
+            data["scope"] = " ".join(request_scopes)
+
+        if additional_params:
+            data.update(additional_params)
+
+        try:
+            response = self.http_client.post(
+                self.config.token_endpoint,
+                data=data,
+                headers={"Accept": "application/json"},
+            )
+
+            response_data = response.json()
+
+            if response.status_code != 200:
+                return TokenResponse(
+                    access_token="",
+                    token_type="",
+                    error=response_data.get("error", "token_error"),
+                    error_description=response_data.get(
+                        "error_description",
+                        f"Token request failed with status {response.status_code}",
+                    ),
+                    raw_response=response_data,
+                )
+
+            return TokenResponse(
+                access_token=response_data.get("access_token", ""),
+                token_type=response_data.get("token_type", "Bearer"),
+                expires_in=response_data.get("expires_in"),
+                refresh_token=response_data.get("refresh_token"),
+                id_token=response_data.get("id_token"),  # Usually not returned for client_credentials
+                scope=response_data.get("scope"),
+                raw_response=response_data,
+            )
+
+        except httpx.HTTPError as e:
+            return TokenResponse(
+                access_token="",
+                token_type="",
+                error="http_error",
+                error_description=f"HTTP error during token request: {e}",
+            )
+        except Exception as e:
+            return TokenResponse(
+                access_token="",
+                token_type="",
+                error="unexpected_error",
+                error_description=f"Unexpected error during token request: {e}",
+            )
