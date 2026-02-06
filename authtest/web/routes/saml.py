@@ -21,7 +21,7 @@ from markupsafe import Markup
 if TYPE_CHECKING:
     from werkzeug.wrappers import Response as WerkzeugResponse
 
-from authtest.core.saml.flows import FlowState, FlowStatus, IdPInitiatedFlow, SPInitiatedFlow
+from authtest.core.saml.flows import ArtifactFlow, FlowState, FlowStatus, IdPInitiatedFlow, SPInitiatedFlow
 from authtest.core.saml.utils import (
     get_attribute_info,
     get_authn_context_description,
@@ -412,8 +412,9 @@ def metadata() -> Response:
     base_url = get_base_url()
     entity_id = f"{base_url}/saml/metadata"
     acs_url = f"{base_url}/saml/acs"
+    artifact_acs_url = f"{base_url}/saml/artifact/acs"
 
-    # Simple SP metadata
+    # SP metadata with POST and Artifact binding support
     metadata_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
     entityID="{entity_id}">
@@ -427,6 +428,10 @@ def metadata() -> Response:
             Location="{acs_url}"
             index="0"
             isDefault="true"/>
+        <md:AssertionConsumerService
+            Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact"
+            Location="{artifact_acs_url}"
+            index="1"/>
     </md:SPSSODescriptor>
 </md:EntityDescriptor>"""
 
@@ -441,3 +446,154 @@ def cancel() -> WerkzeugResponse:
     session.pop(FLOW_STATE_KEY, None)
     flash("SSO test cancelled", "info")
     return redirect(url_for("saml.index"))
+
+
+# Session key for artifact flow state
+ARTIFACT_FLOW_STATE_KEY = "saml_artifact_flow_state"
+
+
+@saml_bp.route("/artifact", methods=["GET", "POST"])
+def artifact() -> str | WerkzeugResponse:
+    """SAML Artifact Binding test page."""
+    if request.method == "GET":
+        # Show IdP selection or preflight if IdP already selected
+        idp_id = request.args.get("idp_id", type=int)
+        if not idp_id:
+            return redirect(url_for("saml.index"))
+
+        db = get_database()
+        db_session = db.get_session()
+
+        try:
+            idp = db_session.query(IdPProvider).get(idp_id)
+            if not idp or idp.idp_type != IdPType.SAML:
+                flash("Invalid IdP selected", "error")
+                return redirect(url_for("saml.index"))
+
+            # Start the flow and run preflight checks
+            base_url = get_base_url()
+            flow = ArtifactFlow(idp, db, base_url=base_url)
+            state = flow.start_flow()
+
+            # Store state in session
+            session[ARTIFACT_FLOW_STATE_KEY] = state.to_dict()
+
+            return render_template(
+                "saml/artifact.html",
+                idp=idp,
+                state=state,
+                preflight=state.preflight,
+            )
+        finally:
+            db_session.close()
+
+    # POST - user confirmed, initiate SSO with artifact binding
+    state_dict = session.get(ARTIFACT_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active flow found", "error")
+        return redirect(url_for("saml.index"))
+
+    state = FlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("saml.index"))
+
+        base_url = get_base_url()
+        flow = ArtifactFlow(idp, db, base_url=base_url)
+
+        # Get options from form
+        force_authn = request.form.get("force_authn") == "on"
+        is_passive = request.form.get("is_passive") == "on"
+
+        state.options["force_authn"] = force_authn
+        state.options["is_passive"] = is_passive
+
+        # Initiate SSO
+        state, redirect_url = flow.initiate_sso(state)
+
+        if state.status == FlowStatus.FAILED:
+            flash(state.error or "Failed to initiate SSO", "error")
+            return render_template(
+                "saml/artifact.html",
+                idp=idp,
+                state=state,
+                preflight=state.preflight,
+            )
+
+        # Update session state
+        session[ARTIFACT_FLOW_STATE_KEY] = state.to_dict()
+
+        # Redirect to IdP
+        return redirect(redirect_url)
+    finally:
+        db_session.close()
+
+
+@saml_bp.route("/artifact/acs", methods=["GET", "POST"])
+def artifact_acs() -> str | WerkzeugResponse:
+    """Artifact Consumer Service - handles artifacts from IdP.
+
+    The IdP redirects here with the artifact instead of sending
+    a full SAML Response.
+    """
+    # Get artifact from query params (GET) or form (POST)
+    artifact = request.args.get("SAMLart") or request.form.get("SAMLart")
+    relay_state = request.args.get("RelayState") or request.form.get("RelayState")
+
+    if not artifact:
+        flash("No SAML artifact received", "error")
+        return redirect(url_for("saml.index"))
+
+    # Get flow state from session
+    state_dict = session.get(ARTIFACT_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active artifact flow found", "error")
+        return redirect(url_for("saml.index"))
+
+    state = FlowState.from_dict(state_dict)
+
+    # Verify relay state matches if present
+    if relay_state and relay_state != state.flow_id:
+        flash("RelayState mismatch", "error")
+        return redirect(url_for("saml.index"))
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("saml.index"))
+
+        base_url = get_base_url()
+        flow = ArtifactFlow(idp, db, base_url=base_url)
+
+        # Process the artifact (resolve via back-channel)
+        state = flow.process_artifact(state, artifact)
+
+        # Record the result
+        result_id = flow.record_result(state)
+
+        # Get the flow result for display
+        result = flow.get_flow_result(state)
+
+        # Clear the flow state
+        session.pop(ARTIFACT_FLOW_STATE_KEY, None)
+
+        return render_template(
+            "saml/result.html",
+            idp=idp,
+            state=state,
+            result=result,
+            result_id=result_id,
+            flow_type="artifact",
+        )
+    finally:
+        db_session.close()

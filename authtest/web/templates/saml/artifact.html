@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Artifact Binding Test - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">SAML Artifact Binding Test</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Testing against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="mb-6">
+        {% for category, message in messages %}
+        <div class="p-4 rounded-lg mb-2 {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% else %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Info about Artifact Binding -->
+    <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 mb-6">
+        <h3 class="font-semibold text-blue-700 dark:text-blue-300 mb-2">About HTTP-Artifact Binding</h3>
+        <p class="text-sm text-blue-600 dark:text-blue-200">
+            The HTTP-Artifact binding uses a two-step process: the IdP sends a small artifact
+            reference instead of the full SAML assertion. The SP then resolves this artifact
+            via a back-channel SOAP request to retrieve the actual assertion. This approach:
+        </p>
+        <ul class="text-sm text-blue-600 dark:text-blue-200 list-disc list-inside mt-2">
+            <li>Avoids URL length limits (artifacts are small, fixed-size)</li>
+            <li>Provides enhanced security (assertion travels over back-channel)</li>
+            <li>Requires the IdP to expose an Artifact Resolution Service (ARS)</li>
+        </ul>
+    </div>
+
+    <!-- Pre-flight Checklist -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Pre-flight Checklist</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                Verifying configuration before initiating artifact binding SSO
+            </p>
+        </div>
+        <div class="p-4">
+            {% if preflight %}
+            <ul class="space-y-3">
+                {% for check in preflight.checks %}
+                <li class="flex items-start">
+                    {% if check.passed %}
+                    <svg class="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    {% endif %}
+                    <div class="flex-1">
+                        <p class="font-medium {% if check.passed %}text-green-700 dark:text-green-400{% else %}text-red-700 dark:text-red-400{% endif %}">
+                            {{ check.name }}
+                        </p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ check.description }}</p>
+                        {% if check.details %}
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1 font-mono truncate">{{ check.details }}</p>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+
+            {% if preflight.warnings %}
+            <div class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
+                <p class="font-medium text-yellow-700 dark:text-yellow-400 text-sm">Warnings:</p>
+                <ul class="mt-1 text-sm text-yellow-600 dark:text-yellow-300 list-disc list-inside">
+                    {% for warning in preflight.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Overall Status -->
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                {% if preflight.all_passed %}
+                <div class="flex items-center text-green-600 dark:text-green-400">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-semibold">Ready to test artifact binding</span>
+                </div>
+                {% else %}
+                <div class="flex items-center text-red-600 dark:text-red-400">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-semibold">Configuration issues detected</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Test Options -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Test Options</h2>
+        </div>
+        <form action="{{ url_for('saml.artifact') }}" method="POST" class="p-4">
+            <div class="space-y-4">
+                <label class="flex items-center">
+                    <input
+                        type="checkbox"
+                        name="force_authn"
+                        class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    >
+                    <span class="ml-2">
+                        <span class="font-medium">Force Authentication</span>
+                        <span class="block text-sm text-gray-500 dark:text-gray-400">
+                            Request fresh authentication even if user has existing IdP session
+                        </span>
+                    </span>
+                </label>
+
+                <label class="flex items-center">
+                    <input
+                        type="checkbox"
+                        name="is_passive"
+                        class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    >
+                    <span class="ml-2">
+                        <span class="font-medium">Passive Authentication</span>
+                        <span class="block text-sm text-gray-500 dark:text-gray-400">
+                            Request authentication without user interaction (fail if not possible)
+                        </span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="mt-6 flex space-x-4">
+                {% if preflight and preflight.all_passed %}
+                <button
+                    type="submit"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors"
+                >
+                    Start Artifact Binding Test
+                </button>
+                {% else %}
+                <button
+                    type="submit"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors opacity-50 cursor-not-allowed"
+                    disabled
+                >
+                    Start Artifact Binding Test
+                </button>
+                {% endif %}
+                <form action="{{ url_for('saml.cancel') }}" method="POST" class="inline">
+                    <button
+                        type="submit"
+                        class="bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+                    >
+                        Cancel
+                    </button>
+                </form>
+            </div>
+        </form>
+    </div>
+
+    <!-- IdP Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">IdP Configuration</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Entity ID</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.entity_id or 'Not configured' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">SSO URL</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.sso_url or 'Not configured' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Artifact Resolution URL</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">
+                        {% if idp.settings and idp.settings.artifact_resolution_url %}
+                        {{ idp.settings.artifact_resolution_url }}
+                        {% else %}
+                        <span class="text-yellow-600 dark:text-yellow-400">Not configured</span>
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                            Set via CLI: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">authtest config idp update NAME --settings '{"artifact_resolution_url": "..."}'</code>
+                        </p>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Certificate</dt>
+                    <dd class="mt-1">
+                        {% if idp.x509_cert %}
+                        <span class="text-green-600 dark:text-green-400">Configured</span>
+                        {% else %}
+                        <span class="text-yellow-600 dark:text-yellow-400">Not configured</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+{% endblock %}

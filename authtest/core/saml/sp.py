@@ -26,6 +26,12 @@ SAML_NS = {
 }
 
 
+# Protocol binding URIs
+BINDING_HTTP_POST = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+BINDING_HTTP_REDIRECT = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+BINDING_HTTP_ARTIFACT = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact"
+
+
 @dataclass
 class SAMLRequest:
     """Represents a SAML AuthnRequest."""
@@ -39,6 +45,7 @@ class SAMLRequest:
     authn_context_class_ref: str | None = None
     force_authn: bool = False
     is_passive: bool = False
+    protocol_binding: str = BINDING_HTTP_POST  # Response binding requested
 
     def to_xml(self) -> str:
         """Generate the AuthnRequest XML."""
@@ -61,7 +68,7 @@ class SAMLRequest:
     IssueInstant="{self.issue_instant}"
     Destination="{self.destination}"
     AssertionConsumerServiceURL="{self.acs_url}"
-    ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"{force_authn_attr}{is_passive_attr}>
+    ProtocolBinding="{self.protocol_binding}"{force_authn_attr}{is_passive_attr}>
     <saml:Issuer>{self.issuer}</saml:Issuer>
     <samlp:NameIDPolicy Format="{self.name_id_policy_format}" AllowCreate="true"/>{authn_context}
 </samlp:AuthnRequest>"""
@@ -407,6 +414,7 @@ class SAMLServiceProvider:
         force_authn: bool = False,
         is_passive: bool = False,
         authn_context: str | None = None,
+        protocol_binding: str = BINDING_HTTP_POST,
     ) -> SAMLRequest:
         """Create an AuthnRequest for SP-Initiated SSO.
 
@@ -414,6 +422,7 @@ class SAMLServiceProvider:
             force_authn: Request fresh authentication even if user has existing session.
             is_passive: Request passive authentication (no user interaction).
             authn_context: Requested authentication context class.
+            protocol_binding: The binding for the response (POST, Redirect, or Artifact).
 
         Returns:
             SAMLRequest object ready to be encoded and sent.
@@ -435,6 +444,7 @@ class SAMLServiceProvider:
             force_authn=force_authn,
             is_passive=is_passive,
             authn_context_class_ref=authn_context,
+            protocol_binding=protocol_binding,
         )
 
     def build_sso_redirect_url(
