@@ -1,1 +1,734 @@
-"""OIDC authentication flow handlers."""
+"""OIDC authentication flow handlers.
+
+Handles OIDC/OAuth2 flow orchestration, including:
+- Authorization Code flow
+- Token exchange
+- Token validation and display
+- Result recording
+"""
+
+from __future__ import annotations
+
+import secrets
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+from authtest.core.oidc.client import (
+    AuthorizationRequest,
+    OIDCClient,
+    OIDCClientConfig,
+    TokenResponse,
+    UserInfoResponse,
+)
+from authtest.core.oidc.utils import DecodedToken, decode_jwt
+
+if TYPE_CHECKING:
+    from authtest.storage.database import Database
+    from authtest.storage.models import IdPProvider
+
+
+class OIDCFlowStatus(StrEnum):
+    """Status of an OIDC flow test."""
+
+    PENDING = "pending"
+    PREFLIGHT = "preflight"
+    INITIATED = "initiated"
+    WAITING_CALLBACK = "waiting_callback"
+    EXCHANGING = "exchanging"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class TestOutcome(StrEnum):
+    """Outcome of a test."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    ERROR = "error"
+
+
+@dataclass
+class PreflightCheck:
+    """Result of a single preflight check."""
+
+    name: str
+    description: str
+    passed: bool
+    details: str = ""
+
+
+@dataclass
+class PreflightResult:
+    """Result of all preflight checks."""
+
+    checks: list[PreflightCheck] = field(default_factory=list)
+    all_passed: bool = False
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class OIDCFlowState:
+    """Maintains state for an in-progress OIDC flow.
+
+    This state is stored in the Flask session to track the flow
+    across the authorization redirect.
+    """
+
+    flow_id: str
+    idp_id: int
+    idp_name: str
+    status: OIDCFlowStatus
+    grant_type: str = "authorization_code"
+
+    # Client configuration
+    client_id: str = ""
+    redirect_uri: str = ""
+    scopes: list[str] = field(default_factory=list)
+
+    # Authorization request state
+    state: str | None = None
+    nonce: str | None = None
+    code_verifier: str | None = None  # For PKCE
+
+    # Timing
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    # Preflight
+    preflight: PreflightResult | None = None
+
+    # Response data
+    authorization_code: str | None = None
+    token_response: TokenResponse | None = None
+    userinfo_response: UserInfoResponse | None = None
+    id_token_decoded: DecodedToken | None = None
+    access_token_decoded: DecodedToken | None = None
+
+    # Error handling
+    error: str | None = None
+    error_description: str | None = None
+
+    # Options
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for session storage."""
+        return {
+            "flow_id": self.flow_id,
+            "idp_id": self.idp_id,
+            "idp_name": self.idp_name,
+            "status": self.status,
+            "grant_type": self.grant_type,
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "scopes": self.scopes,
+            "state": self.state,
+            "nonce": self.nonce,
+            "code_verifier": self.code_verifier,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "preflight": _preflight_to_dict(self.preflight) if self.preflight else None,
+            "authorization_code": self.authorization_code,
+            "token_response": _token_response_to_dict(self.token_response) if self.token_response else None,
+            "userinfo_response": _userinfo_to_dict(self.userinfo_response) if self.userinfo_response else None,
+            "id_token_decoded": _decoded_token_to_dict(self.id_token_decoded) if self.id_token_decoded else None,
+            "access_token_decoded": _decoded_token_to_dict(self.access_token_decoded) if self.access_token_decoded else None,
+            "error": self.error,
+            "error_description": self.error_description,
+            "options": self.options,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OIDCFlowState:
+        """Reconstruct from dictionary."""
+        state = cls(
+            flow_id=data["flow_id"],
+            idp_id=data["idp_id"],
+            idp_name=data["idp_name"],
+            status=OIDCFlowStatus(data["status"]),
+            grant_type=data.get("grant_type", "authorization_code"),
+            client_id=data.get("client_id", ""),
+            redirect_uri=data.get("redirect_uri", ""),
+            scopes=data.get("scopes", []),
+            state=data.get("state"),
+            nonce=data.get("nonce"),
+            code_verifier=data.get("code_verifier"),
+            started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
+            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+            preflight=_dict_to_preflight(data["preflight"]) if data.get("preflight") else None,
+            authorization_code=data.get("authorization_code"),
+            error=data.get("error"),
+            error_description=data.get("error_description"),
+            options=data.get("options", {}),
+        )
+
+        # Reconstruct token response if present
+        if data.get("token_response"):
+            state.token_response = _dict_to_token_response(data["token_response"])
+
+        # Reconstruct userinfo response if present
+        if data.get("userinfo_response"):
+            state.userinfo_response = _dict_to_userinfo(data["userinfo_response"])
+
+        # Reconstruct decoded tokens if present
+        if data.get("id_token_decoded"):
+            state.id_token_decoded = _dict_to_decoded_token(data["id_token_decoded"])
+        if data.get("access_token_decoded"):
+            state.access_token_decoded = _dict_to_decoded_token(data["access_token_decoded"])
+
+        return state
+
+
+def _preflight_to_dict(preflight: PreflightResult) -> dict[str, Any]:
+    """Convert PreflightResult to dict."""
+    return {
+        "all_passed": preflight.all_passed,
+        "warnings": preflight.warnings,
+        "checks": [
+            {
+                "name": c.name,
+                "description": c.description,
+                "passed": c.passed,
+                "details": c.details,
+            }
+            for c in preflight.checks
+        ],
+    }
+
+
+def _dict_to_preflight(data: dict[str, Any]) -> PreflightResult:
+    """Reconstruct PreflightResult from dict."""
+    checks = [
+        PreflightCheck(
+            name=c["name"],
+            description=c["description"],
+            passed=c["passed"],
+            details=c.get("details", ""),
+        )
+        for c in data.get("checks", [])
+    ]
+    return PreflightResult(
+        checks=checks,
+        all_passed=data.get("all_passed", False),
+        warnings=data.get("warnings", []),
+    )
+
+
+def _token_response_to_dict(token: TokenResponse) -> dict[str, Any]:
+    """Convert TokenResponse to dict."""
+    return {
+        "access_token": token.access_token,
+        "token_type": token.token_type,
+        "expires_in": token.expires_in,
+        "refresh_token": token.refresh_token,
+        "id_token": token.id_token,
+        "scope": token.scope,
+        "raw_response": token.raw_response,
+        "error": token.error,
+        "error_description": token.error_description,
+    }
+
+
+def _dict_to_token_response(data: dict[str, Any]) -> TokenResponse:
+    """Reconstruct TokenResponse from dict."""
+    return TokenResponse(
+        access_token=data.get("access_token", ""),
+        token_type=data.get("token_type", ""),
+        expires_in=data.get("expires_in"),
+        refresh_token=data.get("refresh_token"),
+        id_token=data.get("id_token"),
+        scope=data.get("scope"),
+        raw_response=data.get("raw_response", {}),
+        error=data.get("error"),
+        error_description=data.get("error_description"),
+    )
+
+
+def _userinfo_to_dict(userinfo: UserInfoResponse) -> dict[str, Any]:
+    """Convert UserInfoResponse to dict."""
+    return {
+        "sub": userinfo.sub,
+        "name": userinfo.name,
+        "email": userinfo.email,
+        "email_verified": userinfo.email_verified,
+        "preferred_username": userinfo.preferred_username,
+        "given_name": userinfo.given_name,
+        "family_name": userinfo.family_name,
+        "picture": userinfo.picture,
+        "claims": userinfo.claims,
+        "error": userinfo.error,
+        "error_description": userinfo.error_description,
+    }
+
+
+def _dict_to_userinfo(data: dict[str, Any]) -> UserInfoResponse:
+    """Reconstruct UserInfoResponse from dict."""
+    return UserInfoResponse(
+        sub=data.get("sub"),
+        name=data.get("name"),
+        email=data.get("email"),
+        email_verified=data.get("email_verified"),
+        preferred_username=data.get("preferred_username"),
+        given_name=data.get("given_name"),
+        family_name=data.get("family_name"),
+        picture=data.get("picture"),
+        claims=data.get("claims", {}),
+        error=data.get("error"),
+        error_description=data.get("error_description"),
+    )
+
+
+def _decoded_token_to_dict(decoded: DecodedToken) -> dict[str, Any]:
+    """Convert DecodedToken to dict."""
+    return {
+        "header": decoded.header,
+        "payload": decoded.payload,
+        "signature": decoded.signature,
+        "is_valid_format": decoded.is_valid_format,
+        "error": decoded.error,
+        "issuer": decoded.issuer,
+        "subject": decoded.subject,
+        "audience": decoded.audience,
+        "expiration": decoded.expiration.isoformat() if decoded.expiration else None,
+        "issued_at": decoded.issued_at.isoformat() if decoded.issued_at else None,
+        "not_before": decoded.not_before.isoformat() if decoded.not_before else None,
+        "jwt_id": decoded.jwt_id,
+        "nonce": decoded.nonce,
+    }
+
+
+def _dict_to_decoded_token(data: dict[str, Any]) -> DecodedToken:
+    """Reconstruct DecodedToken from dict."""
+    decoded = DecodedToken(
+        header=data.get("header", {}),
+        payload=data.get("payload", {}),
+        signature=data.get("signature", ""),
+        is_valid_format=data.get("is_valid_format", False),
+        error=data.get("error"),
+        issuer=data.get("issuer"),
+        subject=data.get("subject"),
+        audience=data.get("audience"),
+        jwt_id=data.get("jwt_id"),
+        nonce=data.get("nonce"),
+    )
+    if data.get("expiration"):
+        decoded.expiration = datetime.fromisoformat(data["expiration"])
+    if data.get("issued_at"):
+        decoded.issued_at = datetime.fromisoformat(data["issued_at"])
+    if data.get("not_before"):
+        decoded.not_before = datetime.fromisoformat(data["not_before"])
+    return decoded
+
+
+@dataclass
+class OIDCFlowResult:
+    """Result of an OIDC flow test."""
+
+    flow_state: OIDCFlowState
+    outcome: TestOutcome
+    duration_ms: int | None = None
+    summary: str = ""
+
+
+class AuthorizationCodeFlow:
+    """Orchestrates the OIDC Authorization Code flow.
+
+    This flow follows these steps:
+    1. Run pre-flight checks
+    2. Create authorization request
+    3. Redirect user to IdP
+    4. Handle callback with authorization code
+    5. Exchange code for tokens
+    6. Decode and display tokens
+    7. Optionally fetch userinfo
+    8. Record test result
+    """
+
+    def __init__(
+        self,
+        idp: IdPProvider,
+        db: Database,
+        client_id: str,
+        client_secret: str | None = None,
+        base_url: str = "https://localhost:8443",
+        scopes: list[str] | None = None,
+    ) -> None:
+        """Initialize the flow handler.
+
+        Args:
+            idp: Identity Provider configuration.
+            db: Database instance for recording results.
+            client_id: OAuth2 client ID.
+            client_secret: OAuth2 client secret (optional for public clients).
+            base_url: Base URL of this application.
+            scopes: Scopes to request (defaults to IdP defaults).
+        """
+        self.idp = idp
+        self.db = db
+        self.base_url = base_url.rstrip("/")
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.scopes = scopes
+
+        # Build redirect URI
+        self.redirect_uri = f"{self.base_url}/oidc/callback"
+
+        # Create client config
+        self.client_config = OIDCClientConfig.from_idp(
+            idp=idp,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=self.redirect_uri,
+            scopes=scopes,
+        )
+        self.client = OIDCClient(self.client_config)
+
+    def start_flow(
+        self,
+        prompt: str | None = None,
+        login_hint: str | None = None,
+    ) -> OIDCFlowState:
+        """Start a new Authorization Code flow.
+
+        Args:
+            prompt: OIDC prompt parameter.
+            login_hint: OIDC login_hint parameter.
+
+        Returns:
+            OIDCFlowState with preflight results.
+        """
+        flow_id = f"oidc_flow_{secrets.token_hex(16)}"
+
+        # Run pre-flight checks
+        preflight = self._run_preflight_checks()
+
+        state = OIDCFlowState(
+            flow_id=flow_id,
+            idp_id=self.idp.id,
+            idp_name=self.idp.name,
+            status=OIDCFlowStatus.PREFLIGHT,
+            grant_type="authorization_code",
+            client_id=self.client_id,
+            redirect_uri=self.redirect_uri,
+            scopes=self.client_config.scopes,
+            started_at=datetime.now(UTC),
+            preflight=preflight,
+            options={
+                "prompt": prompt,
+                "login_hint": login_hint,
+            },
+        )
+
+        return state
+
+    def _run_preflight_checks(self) -> PreflightResult:
+        """Run pre-flight checks for the Authorization Code flow."""
+        checks = []
+        warnings = []
+
+        # Check authorization endpoint
+        auth_check = PreflightCheck(
+            name="Authorization Endpoint",
+            description="IdP authorization endpoint is configured",
+            passed=bool(self.client_config.authorization_endpoint),
+            details=self.client_config.authorization_endpoint or "Not configured",
+        )
+        checks.append(auth_check)
+
+        # Check token endpoint
+        token_check = PreflightCheck(
+            name="Token Endpoint",
+            description="IdP token endpoint is configured",
+            passed=bool(self.client_config.token_endpoint),
+            details=self.client_config.token_endpoint or "Not configured",
+        )
+        checks.append(token_check)
+
+        # Check client ID
+        client_check = PreflightCheck(
+            name="Client ID",
+            description="OAuth2 client ID is configured",
+            passed=bool(self.client_id),
+            details=self.client_id if self.client_id else "Not configured",
+        )
+        checks.append(client_check)
+
+        # Check redirect URI
+        redirect_check = PreflightCheck(
+            name="Redirect URI",
+            description="Redirect URI is configured",
+            passed=bool(self.redirect_uri),
+            details=self.redirect_uri,
+        )
+        checks.append(redirect_check)
+
+        # Check for client secret (confidential client)
+        if not self.client_secret:
+            warnings.append(
+                "No client secret configured. This is only valid for public clients using PKCE."
+            )
+
+        # Check userinfo endpoint (optional)
+        if not self.client_config.userinfo_endpoint:
+            warnings.append(
+                "UserInfo endpoint not configured. User claims will only be available from ID token."
+            )
+
+        # Check JWKS URI (optional but recommended)
+        if not self.client_config.jwks_uri:
+            warnings.append(
+                "JWKS URI not configured. Token signature verification will not be available."
+            )
+
+        all_passed = all(c.passed for c in checks)
+
+        return PreflightResult(
+            checks=checks,
+            all_passed=all_passed,
+            warnings=warnings,
+        )
+
+    def create_authorization_request(self, state: OIDCFlowState) -> tuple[OIDCFlowState, str]:
+        """Create the authorization request URL.
+
+        Args:
+            state: Current flow state.
+
+        Returns:
+            Tuple of (updated state, authorization URL).
+
+        Raises:
+            ValueError: If flow is in wrong state.
+        """
+        if state.status != OIDCFlowStatus.PREFLIGHT:
+            raise ValueError(f"Cannot create authorization request from state: {state.status}")
+
+        if state.preflight and not state.preflight.all_passed:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = "Pre-flight checks failed"
+            return state, ""
+
+        # Create authorization request
+        auth_request: AuthorizationRequest = self.client.create_authorization_request(
+            prompt=state.options.get("prompt"),
+            login_hint=state.options.get("login_hint"),
+        )
+
+        # Update state
+        state.status = OIDCFlowStatus.INITIATED
+        state.state = auth_request.state
+        state.nonce = auth_request.nonce
+        state.code_verifier = auth_request.code_verifier
+
+        return state, auth_request.authorization_url
+
+    def process_callback(
+        self,
+        state: OIDCFlowState,
+        code: str | None = None,
+        error: str | None = None,
+        error_description: str | None = None,
+        returned_state: str | None = None,
+    ) -> OIDCFlowState:
+        """Process the authorization callback.
+
+        Args:
+            state: Current flow state.
+            code: Authorization code (on success).
+            error: Error code (on failure).
+            error_description: Error description (on failure).
+            returned_state: State parameter returned by IdP.
+
+        Returns:
+            Updated flow state.
+        """
+        state.completed_at = datetime.now(UTC)
+
+        # Verify state parameter
+        if returned_state and returned_state != state.state:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = "state_mismatch"
+            state.error_description = (
+                f"State parameter mismatch. Expected: {state.state}, Got: {returned_state}"
+            )
+            return state
+
+        # Handle error response
+        if error:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = error
+            state.error_description = error_description
+            return state
+
+        # Handle missing code
+        if not code:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = "missing_code"
+            state.error_description = "No authorization code received"
+            return state
+
+        state.authorization_code = code
+        state.status = OIDCFlowStatus.EXCHANGING
+
+        # Exchange code for tokens
+        token_response = self.client.exchange_code(
+            code=code,
+            code_verifier=state.code_verifier,
+        )
+        state.token_response = token_response
+
+        if not token_response.is_success:
+            state.status = OIDCFlowStatus.FAILED
+            state.error = token_response.error
+            state.error_description = token_response.error_description
+            return state
+
+        # Decode ID token if present
+        if token_response.id_token:
+            state.id_token_decoded = decode_jwt(token_response.id_token)
+
+            # Validate nonce
+            if state.nonce and state.id_token_decoded.nonce != state.nonce:
+                state.status = OIDCFlowStatus.FAILED
+                state.error = "nonce_mismatch"
+                state.error_description = (
+                    f"Nonce mismatch in ID token. Expected: {state.nonce}, "
+                    f"Got: {state.id_token_decoded.nonce}"
+                )
+                return state
+
+        # Try to decode access token (may not be JWT)
+        if token_response.access_token:
+            decoded = decode_jwt(token_response.access_token)
+            if decoded.is_valid_format:
+                state.access_token_decoded = decoded
+
+        # Fetch userinfo if endpoint is configured
+        if self.client_config.userinfo_endpoint and token_response.access_token:
+            userinfo = self.client.get_userinfo(token_response.access_token)
+            state.userinfo_response = userinfo
+
+        state.status = OIDCFlowStatus.COMPLETED
+        return state
+
+    def record_result(self, state: OIDCFlowState) -> int:
+        """Record the test result to the database.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            ID of the created TestResult record.
+        """
+        from authtest.storage.models import TestResult
+
+        # Calculate duration
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        # Determine outcome
+        if state.status == OIDCFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+        elif state.status == OIDCFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+        else:
+            outcome = TestOutcome.ERROR
+
+        # Build request data
+        request_data = {
+            "flow_type": state.grant_type,
+            "client_id": state.client_id,
+            "redirect_uri": state.redirect_uri,
+            "scopes": state.scopes,
+            "state": state.state,
+            "nonce": state.nonce,
+            "options": state.options,
+        }
+
+        # Build response data
+        response_data: dict[str, Any] = {}
+        if state.token_response:
+            response_data["token_response"] = _token_response_to_dict(state.token_response)
+        if state.id_token_decoded:
+            response_data["id_token_decoded"] = _decoded_token_to_dict(state.id_token_decoded)
+        if state.access_token_decoded:
+            response_data["access_token_decoded"] = _decoded_token_to_dict(state.access_token_decoded)
+        if state.userinfo_response:
+            response_data["userinfo"] = _userinfo_to_dict(state.userinfo_response)
+
+        result = TestResult(
+            idp_provider_id=state.idp_id,
+            test_name="Authorization Code Flow",
+            test_type="oidc",
+            status=outcome.value,
+            error_message=state.error_description or state.error,
+            started_at=state.started_at or datetime.now(UTC),
+            completed_at=state.completed_at,
+            duration_ms=duration_ms,
+            request_data=request_data,
+            response_data=response_data,
+        )
+
+        session = self.db.get_session()
+        try:
+            session.add(result)
+            session.commit()
+            result_id = result.id
+        finally:
+            session.close()
+
+        return result_id
+
+    def get_flow_result(self, state: OIDCFlowState) -> OIDCFlowResult:
+        """Get the final result of the flow.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            OIDCFlowResult with outcome summary.
+        """
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        if state.status == OIDCFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+
+            # Build summary
+            if state.id_token_decoded and state.id_token_decoded.subject:
+                summary = f"Authenticated as: {state.id_token_decoded.subject}"
+            elif state.userinfo_response and state.userinfo_response.sub:
+                summary = f"Authenticated as: {state.userinfo_response.sub}"
+            else:
+                summary = "Authentication successful"
+
+            # Add email if available
+            email = None
+            if state.userinfo_response and state.userinfo_response.email:
+                email = state.userinfo_response.email
+            elif state.id_token_decoded and state.id_token_decoded.payload.get("email"):
+                email = state.id_token_decoded.payload["email"]
+
+            if email:
+                summary += f" ({email})"
+
+        elif state.status == OIDCFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+            summary = state.error_description or state.error or "Authentication failed"
+        else:
+            outcome = TestOutcome.ERROR
+            summary = state.error or f"Flow ended in unexpected state: {state.status}"
+
+        return OIDCFlowResult(
+            flow_state=state,
+            outcome=outcome,
+            duration_ms=duration_ms,
+            summary=summary,
+        )
