@@ -111,3 +111,25 @@ after each iteration and it's included in prompts for context.
   - Certificate chain validation needs to parse multiple PEM certs from single file
 ---
 
+## 2026-02-05 - US-032
+- **What was implemented**: CLI certificate commands (already complete from previous work)
+- **Files verified**:
+  - `authtest/cli/certs.py` - Complete CLI with all required commands:
+    - `certs generate` - Generate self-signed TLS or signing certs with options for CN, days, output dir
+    - `certs import` - Import PEM or PKCS#12 certificates with password support
+    - `certs list` - List all certificates in a directory with validity status (VALID/EXPIRED)
+    - `certs inspect` - Decode full X.509 details (subject, issuer, validity, SANs, fingerprints)
+    - `certs status` - Show current TLS configuration status
+  - `authtest/cli/main.py` - Certs command group registered at line 89
+  - `authtest/core/crypto/certs.py` - Core crypto functions used by CLI
+- **Verification**:
+  - Type checks pass (mypy)
+  - Linting passes (ruff)
+  - All 33 tests pass
+  - CLI commands accessible via `authtest certs <command>`
+- **Learnings:**
+  - CLI already fully implemented as part of earlier crypto/TLS work
+  - Click's `path_type=Path` requires `# type: ignore[type-var]` due to typing quirks
+  - Certificate status coloring uses `click.style(fg="green"/"red")` for visual feedback
+---
+
