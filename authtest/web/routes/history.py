@@ -318,7 +318,7 @@ def export() -> str | Response | WerkzeugResponse:
                 mimetype="application/json",
                 headers={"Content-Disposition": f"attachment; filename=authtest_history_{timestamp}.json"},
             )
-        else:  # csv
+        elif export_format == "csv":
             output = io.StringIO()
             writer = csv.DictWriter(output, fieldnames=[
                 "id", "test_name", "test_type", "idp_name", "status",
@@ -333,6 +333,27 @@ def export() -> str | Response | WerkzeugResponse:
                 output.getvalue(),
                 mimetype="text/csv",
                 headers={"Content-Disposition": f"attachment; filename=authtest_history_{timestamp}.csv"},
+            )
+        else:  # pdf
+            from authtest.reports import ReportMetadata, generate_pdf_report
+
+            # Get PDF-specific form fields
+            company_name = request.form.get("company_name", "")
+            project_name = request.form.get("project_name", "")
+            assessor_name = request.form.get("assessor_name", "")
+
+            metadata = ReportMetadata(
+                company_name=company_name or "AuthTest Security Assessment",
+                project_name=project_name,
+                assessor_name=assessor_name,
+                include_tokens=include_tokens,
+            )
+            pdf_bytes = generate_pdf_report(export_data, metadata)
+
+            return Response(
+                pdf_bytes,
+                mimetype="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=authtest_report_{timestamp}.pdf"},
             )
     finally:
         db_session.close()

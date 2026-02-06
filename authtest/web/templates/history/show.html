@@ -252,8 +252,8 @@
     {% endif %}
 
     <!-- Export Single Result -->
-    <div class="flex justify-end space-x-2">
-        <form method="POST" action="{{ url_for('history.export') }}" class="flex space-x-2">
+    <div class="flex flex-wrap justify-end gap-2">
+        <form method="POST" action="{{ url_for('history.export') }}">
             <input type="hidden" name="selected_ids" value="{{ result.id }}">
             <input type="hidden" name="format" value="json">
             <input type="hidden" name="include_tokens" value="false">
@@ -265,8 +265,16 @@
             <input type="hidden" name="selected_ids" value="{{ result.id }}">
             <input type="hidden" name="format" value="json">
             <input type="hidden" name="include_tokens" value="true">
-            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+            <button type="submit" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm">
                 Export JSON (full)
+            </button>
+        </form>
+        <form method="POST" action="{{ url_for('history.export') }}">
+            <input type="hidden" name="selected_ids" value="{{ result.id }}">
+            <input type="hidden" name="format" value="pdf">
+            <input type="hidden" name="include_tokens" value="false">
+            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+                Export PDF Report
             </button>
         </form>
     </div>

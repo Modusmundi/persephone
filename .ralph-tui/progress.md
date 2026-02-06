@@ -60,6 +60,17 @@ after each iteration and it's included in prompts for context.
 - OIDC discovery via fetch_oidc_discovery() from discovery module
 - WerkzeugResponse type needed for redirect() return values in Flask route type hints
 
+### PDF Report Generation Pattern
+- Reports module in `authtest/reports/` with `pdf.py` for WeasyPrint-based PDF generation
+- ReportMetadata dataclass holds company_name, project_name, assessor_name, include_tokens flag
+- generate_pdf_report(results, metadata) takes list of result dicts and returns PDF bytes
+- HTML template string generated in Python with CSS defined separately
+- CSS uses @page rule for A4 size, margins, and page numbers via counter(page)/counter(pages)
+- Use html.escape() for all user-provided content to prevent XSS
+- BytesIO buffer for PDF output: `html_doc.write_pdf(pdf_buffer, stylesheets=[css])`
+- Flask Response with mimetype="application/pdf" and Content-Disposition for download
+- Token redaction shows partial values (first/last 8 chars) for identification while hiding secrets
+
 ---
 
 ### OIDC Discovery Pattern
@@ -510,5 +521,43 @@ after each iteration and it's included in prompts for context.
   - Radio buttons with name="include_tokens" value="true/false" used instead of checkbox for clearer semantics
   - Redaction covers access_token, id_token, refresh_token in response_data.tokens
   - Also redacts client_secret and code_verifier from request_data for completeness
+---
+
+## 2026-02-05 - US-023
+- **What was implemented**: PDF report generation with WeasyPrint for security assessment documentation
+- **Files created/modified**:
+  - `authtest/reports/pdf.py` - Full PDF report generator with ReportMetadata dataclass, generate_pdf_report(), generate_single_result_pdf(), redact_sensitive_data()
+  - `authtest/reports/__init__.py` - Updated exports for PDF module
+  - `authtest/cli/history.py` - Added PDF format option to export command with --company, --project, --assessor options
+  - `authtest/web/routes/history.py` - Added PDF format support to export route
+  - `authtest/web/templates/history/export.html` - Added PDF format radio button and conditional company/project/assessor fields
+  - `authtest/web/templates/history/show.html` - Added "Export PDF Report" button for single result export
+- **Features implemented**:
+  - WeasyPrint HTML-to-PDF generation with professional CSS styling
+  - Report header with company name, project name, assessor name, report date, and confidentiality label
+  - Executive summary section with test count statistics (total/passed/failed/errors)
+  - Detailed per-test sections with status, timing, protocol, IdP information
+  - Request details section (authorization URL, client ID, redirect URI, scopes)
+  - Tokens section with formatted display (truncated for readability)
+  - Claims table with claim names and values
+  - Validation results table with status icons (✓/✗/⚠/—) and color-coded rows
+  - Error section when tests fail
+  - Automatic page breaks to avoid splitting test results across pages
+  - Page numbers in footer using CSS @page counter
+  - Option to redact sensitive tokens (shows first/last 8 chars with [REDACTED])
+  - CLI and web UI for PDF export with metadata fields
+- **Acceptance Criteria Met**:
+  - [x] WeasyPrint HTML-to-PDF generation
+  - [x] Professional formatting with company/project details
+  - [x] Includes all test details, tokens, and validation results
+  - [x] Option to redact sensitive information
+- **Learnings:**
+  - WeasyPrint uses CSS @page rule for page size, margins, and footer content
+  - Page numbers use `counter(page)` and `counter(pages)` CSS counters
+  - `page-break-inside: avoid` prevents test result cards from being split across pages
+  - HTML string generation in Python requires html.escape() for user-provided content
+  - BytesIO buffer used for write_pdf() output, then .getvalue() for bytes
+  - CSS flexbox works in WeasyPrint for layout (summary cards, token grid)
+  - Token redaction shows partial values (first/last 8 chars) for identification while hiding sensitive data
 ---
 

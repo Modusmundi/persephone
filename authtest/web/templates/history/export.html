@@ -7,7 +7,7 @@
     <div class="mb-6">
         <a href="{{ url_for('history.index') }}" class="text-blue-500 hover:text-blue-600 text-sm">&larr; Back to History</a>
         <h1 class="text-2xl font-bold mt-2">Export Test History</h1>
-        <p class="text-gray-500 dark:text-gray-400 mt-1">Export test results to JSON or CSV format.</p>
+        <p class="text-gray-500 dark:text-gray-400 mt-1">Export test results to JSON, CSV, or PDF format.</p>
     </div>
 
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -22,17 +22,45 @@
             <!-- Format Selection -->
             <div class="mb-6">
                 <label class="block text-sm font-medium mb-2">Export Format</label>
-                <div class="flex space-x-4">
+                <div class="flex flex-wrap gap-4">
                     <label class="flex items-center">
-                        <input type="radio" name="format" value="json" checked class="mr-2">
+                        <input type="radio" name="format" value="json" checked class="mr-2" onchange="togglePdfOptions()">
                         <span>JSON</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(full data)</span>
                     </label>
                     <label class="flex items-center">
-                        <input type="radio" name="format" value="csv" class="mr-2">
+                        <input type="radio" name="format" value="csv" class="mr-2" onchange="togglePdfOptions()">
                         <span>CSV</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(summary only)</span>
                     </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="format" value="pdf" class="mr-2" onchange="togglePdfOptions()">
+                        <span>PDF</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(professional report)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- PDF Options (hidden by default) -->
+            <div id="pdf-options" class="mb-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 hidden">
+                <h3 class="text-sm font-medium mb-3 text-blue-800 dark:text-blue-200">PDF Report Details</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">These details appear in the PDF report header.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Company/Organization</label>
+                        <input type="text" name="company_name" placeholder="Acme Corporation"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Project Name</label>
+                        <input type="text" name="project_name" placeholder="SSO Security Audit"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Assessor Name</label>
+                        <input type="text" name="assessor_name" placeholder="Security Team"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    </div>
                 </div>
             </div>
 
@@ -184,4 +212,16 @@
         </form>
     </div>
 </div>
+
+<script>
+function togglePdfOptions() {
+    const pdfSelected = document.querySelector('input[name="format"][value="pdf"]').checked;
+    const pdfOptions = document.getElementById('pdf-options');
+    if (pdfSelected) {
+        pdfOptions.classList.remove('hidden');
+    } else {
+        pdfOptions.classList.add('hidden');
+    }
+}
+</script>
 {% endblock %}

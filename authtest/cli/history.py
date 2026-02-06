@@ -395,9 +395,27 @@ def _redact_tokens_from_data(data: dict[str, Any]) -> dict[str, Any]:
 @click.option(
     "--format",
     "export_format",
-    type=click.Choice(["json", "csv"]),
+    type=click.Choice(["json", "csv", "pdf"]),
     default="json",
     help="Export format (default: json)",
+)
+@click.option(
+    "--company",
+    "company_name",
+    default="",
+    help="Company/organization name for PDF report header",
+)
+@click.option(
+    "--project",
+    "project_name",
+    default="",
+    help="Project name for PDF report header",
+)
+@click.option(
+    "--assessor",
+    "assessor_name",
+    default="",
+    help="Assessor name for PDF report header",
 )
 @click.option(
     "--include-tokens/--exclude-tokens",
@@ -415,16 +433,19 @@ def history_export(
     until: str | None,
     ids: str | None,
     export_format: str,
+    company_name: str,
+    project_name: str,
+    assessor_name: str,
     include_tokens: bool,
     output_json: bool,
 ) -> None:
     """Export test results to a file.
 
-    Exports test results matching the specified filters to JSON or CSV format.
+    Exports test results matching the specified filters to JSON, CSV, or PDF format.
 
     Examples:
 
-        # Export all results
+        # Export all results as JSON
         authtest history export results.json
 
         # Export failed tests only
@@ -436,11 +457,17 @@ def history_export(
         # Export as CSV
         authtest history export results.csv --format csv
 
+        # Export as PDF report
+        authtest history export report.pdf --format pdf
+
+        # Export PDF with company details
+        authtest history export report.pdf --format pdf --company "Acme Corp" --project "SSO Audit"
+
         # Export with filters
         authtest history export report.json --idp my-okta --since 7d
 
         # Export without raw tokens (for sharing)
-        authtest history export report.json --exclude-tokens
+        authtest history export report.pdf --format pdf --exclude-tokens
     """
     from authtest.storage import Database, IdPProvider, KeyNotFoundError, TestResult
 
@@ -537,7 +564,7 @@ def history_export(
                 "count": len(export_data),
                 "results": export_data,
             }, indent=2, default=str))
-        else:  # csv
+        elif export_format == "csv":
             import csv
             with output_path.open("w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=[
@@ -549,6 +576,17 @@ def history_export(
                     # Exclude complex JSON fields for CSV
                     csv_row = {k: v for k, v in row.items() if k not in ["error_details", "request_data", "response_data"]}
                     writer.writerow(csv_row)
+        else:  # pdf
+            from authtest.reports import ReportMetadata, generate_pdf_report
+
+            metadata = ReportMetadata(
+                company_name=company_name or "AuthTest Security Assessment",
+                project_name=project_name,
+                assessor_name=assessor_name,
+                include_tokens=include_tokens,
+            )
+            pdf_bytes = generate_pdf_report(export_data, metadata)
+            output_path.write_bytes(pdf_bytes)
 
         result = {
             "status": "exported",
