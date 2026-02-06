@@ -24,6 +24,14 @@ after each iteration and it's included in prompts for context.
 - Web routes in `authtest/web/routes/oidc.py` with blueprint registration in `__init__.py`
 - Client credentials can come from ClientConfig model or IdP.settings['client_id']
 
+### JWT Token Validation Pattern
+- Validation module in `authtest/core/oidc/validation.py` with TokenValidator class
+- Separate signature validation (JWKS) from claim validation for partial success reporting
+- ValidationCheck dataclass with name, description, status (valid/invalid/warning/skipped), expected, actual, message
+- TokenValidationResult aggregates checks with `to_dict()`/`from_dict()` for serialization
+- PyJWT library handles JWKS fetching via PyJWKClient and signature verification
+- Clock skew tolerance (default 120s) for time-based claim validation
+
 ---
 
 ## 2026-02-05 - US-011
@@ -76,5 +84,30 @@ after each iteration and it's included in prompts for context.
   - code_challenge for S256 is SHA-256 hash of verifier, base64url encoded without padding
   - S256 produces 43-char challenge (256 bits / 6 bits per base64 char ≈ 43)
   - PKCE is required for public clients (SPAs, mobile apps) but optional for confidential clients
+---
+
+## 2026-02-05 - US-014
+- **What was implemented**: OIDC token decoding and validation
+- **Files created/modified**:
+  - `authtest/core/oidc/validation.py` (NEW) - TokenValidator, TokenValidationResult, ValidationCheck, ValidationStatus, JWKSManager classes for comprehensive JWT validation
+  - `authtest/core/oidc/flows.py` - Added `id_token_validation` and `access_token_validation` fields to OIDCFlowState, integrated TokenValidator in `process_callback()`
+  - `authtest/core/oidc/__init__.py` - Exported validation classes and functions
+  - `authtest/web/routes/oidc.py` - Added `get_claim_description()` template global with OIDC claim descriptions
+  - `authtest/web/templates/oidc/result.html` - Enhanced ID Token and Access Token sections with validation check display, claim-by-claim breakdown with descriptions, signature display
+  - `tests/test_oidc_validation.py` (NEW) - Unit tests for TokenValidator and validation functions
+- **Features implemented**:
+  - JWT decoding with header/payload/signature display (enhanced existing)
+  - Signature validation against IdP JWKS using PyJWT library
+  - Standard claim validation: iss (issuer), aud (audience), exp (expiration), nbf (not before), iat (issued at), nonce
+  - Algorithm security warnings (flags insecure algorithms like 'none')
+  - Claim-by-claim validation breakdown with expected/actual values
+  - Human-readable claim descriptions (40+ OIDC/JWT claims documented)
+  - Clock skew tolerance for time-based validations
+- **Learnings:**
+  - PyJWT's `PyJWKClient` handles JWKS fetching and key matching by 'kid' automatically
+  - Signature validation separate from claim validation allows partial success reporting
+  - Access token validation may differ from ID token (audience claim semantics differ)
+  - ValidationStatus enum uses StrEnum for easy serialization/display
+  - Template globals via `@blueprint.app_template_global()` for reusable template functions
 ---
 

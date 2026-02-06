@@ -23,6 +23,7 @@ from authtest.core.oidc.client import (
     UserInfoResponse,
 )
 from authtest.core.oidc.utils import DecodedToken, decode_jwt
+from authtest.core.oidc.validation import TokenValidationResult, TokenValidator
 
 if TYPE_CHECKING:
     from authtest.storage.database import Database
@@ -109,6 +110,10 @@ class OIDCFlowState:
     id_token_decoded: DecodedToken | None = None
     access_token_decoded: DecodedToken | None = None
 
+    # Token validation results
+    id_token_validation: TokenValidationResult | None = None
+    access_token_validation: TokenValidationResult | None = None
+
     # Error handling
     error: str | None = None
     error_description: str | None = None
@@ -141,6 +146,10 @@ class OIDCFlowState:
             "id_token_decoded": _decoded_token_to_dict(self.id_token_decoded) if self.id_token_decoded else None,
             "access_token_decoded": _decoded_token_to_dict(self.access_token_decoded)
             if self.access_token_decoded
+            else None,
+            "id_token_validation": self.id_token_validation.to_dict() if self.id_token_validation else None,
+            "access_token_validation": self.access_token_validation.to_dict()
+            if self.access_token_validation
             else None,
             "error": self.error,
             "error_description": self.error_description,
@@ -186,6 +195,12 @@ class OIDCFlowState:
             state.id_token_decoded = _dict_to_decoded_token(data["id_token_decoded"])
         if data.get("access_token_decoded"):
             state.access_token_decoded = _dict_to_decoded_token(data["access_token_decoded"])
+
+        # Reconstruct validation results if present
+        if data.get("id_token_validation"):
+            state.id_token_validation = TokenValidationResult.from_dict(data["id_token_validation"])
+        if data.get("access_token_validation"):
+            state.access_token_validation = TokenValidationResult.from_dict(data["access_token_validation"])
 
         return state
 
@@ -598,7 +613,18 @@ class AuthorizationCodeFlow:
         if token_response.id_token:
             state.id_token_decoded = decode_jwt(token_response.id_token)
 
-            # Validate nonce
+            # Validate ID token (signature + claims)
+            validator = TokenValidator(
+                jwks_uri=self.client_config.jwks_uri,
+                issuer=self.client_config.issuer,
+                audience=self.client_id,
+            )
+            state.id_token_validation = validator.validate_token(
+                token_response.id_token,
+                nonce=state.nonce,
+            )
+
+            # Check nonce from validation result or decoded token
             if state.nonce and state.id_token_decoded.nonce != state.nonce:
                 state.status = OIDCFlowStatus.FAILED
                 state.error = "nonce_mismatch"
@@ -612,6 +638,16 @@ class AuthorizationCodeFlow:
             decoded = decode_jwt(token_response.access_token)
             if decoded.is_valid_format:
                 state.access_token_decoded = decoded
+                # Validate access token signature (claims may differ from ID token)
+                validator = TokenValidator(
+                    jwks_uri=self.client_config.jwks_uri,
+                    issuer=self.client_config.issuer,
+                    # audience for access tokens may differ from client_id
+                )
+                state.access_token_validation = validator.validate_token(
+                    token_response.access_token,
+                    validate_signature=True,
+                )
 
         # Fetch userinfo if endpoint is configured
         if self.client_config.userinfo_endpoint and token_response.access_token:
@@ -672,6 +708,10 @@ class AuthorizationCodeFlow:
             response_data["id_token_decoded"] = _decoded_token_to_dict(state.id_token_decoded)
         if state.access_token_decoded:
             response_data["access_token_decoded"] = _decoded_token_to_dict(state.access_token_decoded)
+        if state.id_token_validation:
+            response_data["id_token_validation"] = state.id_token_validation.to_dict()
+        if state.access_token_validation:
+            response_data["access_token_validation"] = state.access_token_validation.to_dict()
         if state.userinfo_response:
             response_data["userinfo"] = _userinfo_to_dict(state.userinfo_response)
 

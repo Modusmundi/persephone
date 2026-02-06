@@ -25,6 +25,14 @@ from authtest.core.oidc.utils import (
     get_algorithm_description,
     get_token_type_description,
 )
+from authtest.core.oidc.validation import (
+    JWKSManager,
+    TokenValidationResult,
+    TokenValidator,
+    ValidationCheck,
+    ValidationStatus,
+    validate_id_token,
+)
 
 __all__ = [
     # Client
@@ -49,4 +57,11 @@ __all__ = [
     "format_token_claims",
     "get_algorithm_description",
     "get_token_type_description",
+    # Validation
+    "JWKSManager",
+    "TokenValidationResult",
+    "TokenValidator",
+    "ValidationCheck",
+    "ValidationStatus",
+    "validate_id_token",
 ]

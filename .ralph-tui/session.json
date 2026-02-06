@@ -3,10 +3,10 @@
   "sessionId": "25d82f5e-e3a0-4aea-88db-13c8150ce3e5",
   "status": "running",
   "startedAt": "2026-02-06T01:00:16.143Z",
-  "updatedAt": "2026-02-06T01:14:22.199Z",
-  "currentIteration": 2,
+  "updatedAt": "2026-02-06T01:20:10.775Z",
+  "currentIteration": 3,
   "maxIterations": 10,
-  "tasksCompleted": 2,
+  "tasksCompleted": 3,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -34,6 +34,16 @@
       "durationMs": 474089,
       "startedAt": "2026-02-06T01:02:13.496Z",
       "endedAt": "2026-02-06T01:10:07.585Z"
+    },
+    {
+      "iteration": 3,
+      "status": "completed",
+      "taskId": "US-013",
+      "taskTitle": "OIDC Authorization Code + PKCE flow",
+      "taskCompleted": true,
+      "durationMs": 253471,
+      "startedAt": "2026-02-06T01:10:08.725Z",
+      "endedAt": "2026-02-06T01:14:22.196Z"
     }
   ],
   "skippedTaskIds": [],

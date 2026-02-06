@@ -310,7 +310,28 @@
     <!-- ID Token Details -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="text-lg font-semibold">ID Token (Decoded)</h2>
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold">ID Token (Decoded)</h2>
+                {% if state.id_token_validation %}
+                <div class="flex items-center">
+                    {% if state.id_token_validation.is_valid %}
+                    <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Valid
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 px-3 py-1 rounded-full text-sm">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        Invalid
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
         </div>
         <div class="p-4">
             <!-- Token Header -->
@@ -334,21 +355,88 @@
                 </dl>
             </div>
 
-            <!-- Token Payload -->
+            {% if state.id_token_validation %}
+            <!-- Validation Results -->
             <div class="mb-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <h3 class="font-semibold text-sm mb-2">Claims</h3>
+                <h3 class="font-semibold text-sm mb-3">Validation Checks</h3>
+                <div class="space-y-2">
+                    {% for check in state.id_token_validation.checks %}
+                    <div class="flex items-start p-3 rounded-lg {% if check.status == 'valid' %}bg-green-50 dark:bg-green-900/20{% elif check.status == 'invalid' %}bg-red-50 dark:bg-red-900/20{% elif check.status == 'warning' %}bg-yellow-50 dark:bg-yellow-900/20{% else %}bg-gray-50 dark:bg-gray-700/50{% endif %}">
+                        <div class="flex-shrink-0 mr-3">
+                            {% if check.status == 'valid' %}
+                            <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            {% elif check.status == 'invalid' %}
+                            <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            {% elif check.status == 'warning' %}
+                            <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            {% else %}
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between">
+                                <p class="font-medium text-sm">{{ check.name }}</p>
+                                <span class="text-xs px-2 py-0.5 rounded {% if check.status == 'valid' %}bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300{% elif check.status == 'invalid' %}bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-300{% elif check.status == 'warning' %}bg-yellow-100 dark:bg-yellow-800 text-yellow-700 dark:text-yellow-300{% else %}bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300{% endif %}">
+                                    {{ check.status }}
+                                </span>
+                            </div>
+                            <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ check.description }}</p>
+                            {% if check.message %}
+                            <p class="text-xs mt-1 {% if check.status == 'invalid' %}text-red-600 dark:text-red-400{% elif check.status == 'warning' %}text-yellow-600 dark:text-yellow-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ check.message }}</p>
+                            {% endif %}
+                            {% if check.expected or check.actual %}
+                            <div class="mt-2 text-xs font-mono">
+                                {% if check.expected %}
+                                <p class="text-gray-500 dark:text-gray-400">Expected: <span class="text-gray-700 dark:text-gray-300">{{ check.expected }}</span></p>
+                                {% endif %}
+                                {% if check.actual %}
+                                <p class="text-gray-500 dark:text-gray-400">Actual: <span class="text-gray-700 dark:text-gray-300">{{ check.actual }}</span></p>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if state.id_token_validation.warnings %}
+                <div class="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                    <p class="font-medium text-sm text-yellow-700 dark:text-yellow-300 mb-1">Warnings</p>
+                    <ul class="text-xs text-yellow-600 dark:text-yellow-400 list-disc list-inside">
+                        {% for warning in state.id_token_validation.warnings %}
+                        <li>{{ warning }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Token Payload (Claims) -->
+            <div class="mb-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 class="font-semibold text-sm mb-2">All Claims</h3>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="border-b border-gray-200 dark:border-gray-700">
                                 <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Claim</th>
+                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Description</th>
                                 <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for key, value in state.id_token_decoded.payload.items() %}
                             <tr class="border-b border-gray-100 dark:border-gray-700">
-                                <td class="py-2 pr-4 align-top font-medium">{{ key }}</td>
+                                <td class="py-2 pr-4 align-top font-medium font-mono text-xs">{{ key }}</td>
+                                <td class="py-2 pr-4 align-top text-gray-500 dark:text-gray-400 text-xs">{{ get_claim_description(key) }}</td>
                                 <td class="py-2 font-mono text-xs break-all">
                                     {% if key in ['exp', 'iat', 'nbf', 'auth_time'] and value is number %}
                                     {{ value }}
@@ -357,6 +445,10 @@
                                     <pre class="whitespace-pre-wrap">{{ value | tojson(indent=2) }}</pre>
                                     {% elif value is iterable and value is not string %}
                                     {{ value | join(', ') }}
+                                    {% elif value is sameas true %}
+                                    <span class="text-green-600">true</span>
+                                    {% elif value is sameas false %}
+                                    <span class="text-red-600">false</span>
                                     {% else %}
                                     {{ value }}
                                     {% endif %}
@@ -368,21 +460,10 @@
                 </div>
             </div>
 
-            <!-- Token Status -->
+            <!-- Signature Display -->
             <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div class="flex items-center">
-                    {% if state.id_token_decoded.is_expired %}
-                    <svg class="w-5 h-5 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span class="text-red-600 dark:text-red-400">Token is expired</span>
-                    {% else %}
-                    <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span class="text-green-600 dark:text-green-400">Token is valid (not expired)</span>
-                    {% endif %}
-                </div>
+                <h3 class="font-semibold text-sm mb-2">Signature</h3>
+                <p class="font-mono text-xs break-all bg-gray-100 dark:bg-gray-700 p-2 rounded">{{ state.id_token_decoded.signature }}</p>
             </div>
         </div>
     </div>
@@ -393,36 +474,134 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
         <details>
             <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <span class="font-semibold">Access Token (Decoded JWT)</span>
-                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+                <div class="flex items-center justify-between w-full">
+                    <div>
+                        <span class="font-semibold">Access Token (Decoded JWT)</span>
+                        <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+                    </div>
+                    {% if state.access_token_validation %}
+                    <div class="flex items-center mr-2">
+                        {% if state.access_token_validation.signature_valid %}
+                        <span class="inline-flex items-center bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded text-xs">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Signature Valid
+                        </span>
+                        {% elif state.access_token_validation.signature_valid is sameas false %}
+                        <span class="inline-flex items-center bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 px-2 py-0.5 rounded text-xs">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            Signature Invalid
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
             </summary>
             <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-                <h3 class="font-semibold text-sm mb-2">Claims</h3>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-gray-200 dark:border-gray-700">
-                                <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Claim</th>
-                                <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for key, value in state.access_token_decoded.payload.items() %}
-                            <tr class="border-b border-gray-100 dark:border-gray-700">
-                                <td class="py-2 pr-4 align-top font-medium">{{ key }}</td>
-                                <td class="py-2 font-mono text-xs break-all">
-                                    {% if value is mapping %}
-                                    <pre class="whitespace-pre-wrap">{{ value | tojson(indent=2) }}</pre>
-                                    {% elif value is iterable and value is not string %}
-                                    {{ value | join(', ') }}
-                                    {% else %}
-                                    {{ value }}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <!-- Header -->
+                <div class="mb-4">
+                    <h3 class="font-semibold text-sm mb-2">Header</h3>
+                    <dl class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Algorithm</dt>
+                            <dd class="mt-1 font-mono">{{ state.access_token_decoded.header.alg or 'N/A' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-500 dark:text-gray-400">Type</dt>
+                            <dd class="mt-1 font-mono">{{ state.access_token_decoded.header.typ or 'JWT' }}</dd>
+                        </div>
+                        {% if state.access_token_decoded.header.kid %}
+                        <div class="col-span-2">
+                            <dt class="text-gray-500 dark:text-gray-400">Key ID</dt>
+                            <dd class="mt-1 font-mono text-xs truncate">{{ state.access_token_decoded.header.kid }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+
+                {% if state.access_token_validation and state.access_token_validation.checks %}
+                <!-- Validation Results -->
+                <div class="mb-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 class="font-semibold text-sm mb-3">Validation Checks</h3>
+                    <div class="space-y-2">
+                        {% for check in state.access_token_validation.checks %}
+                        <div class="flex items-start p-2 rounded {% if check.status == 'valid' %}bg-green-50 dark:bg-green-900/20{% elif check.status == 'invalid' %}bg-red-50 dark:bg-red-900/20{% elif check.status == 'warning' %}bg-yellow-50 dark:bg-yellow-900/20{% else %}bg-gray-50 dark:bg-gray-700/50{% endif %}">
+                            <div class="flex-shrink-0 mr-2">
+                                {% if check.status == 'valid' %}
+                                <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                {% elif check.status == 'invalid' %}
+                                <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                                {% elif check.status == 'warning' %}
+                                <svg class="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                {% else %}
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-xs">{{ check.name }}</p>
+                                {% if check.message %}
+                                <p class="text-xs text-gray-500 dark:text-gray-400">{{ check.message }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Claims -->
+                <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 class="font-semibold text-sm mb-2">Claims</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-gray-200 dark:border-gray-700">
+                                    <th class="text-left py-2 pr-4 text-gray-500 dark:text-gray-400 w-1/4">Claim</th>
+                                    <th class="text-left py-2 text-gray-500 dark:text-gray-400">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for key, value in state.access_token_decoded.payload.items() %}
+                                <tr class="border-b border-gray-100 dark:border-gray-700">
+                                    <td class="py-2 pr-4 align-top font-medium font-mono text-xs">{{ key }}</td>
+                                    <td class="py-2 font-mono text-xs break-all">
+                                        {% if key in ['exp', 'iat', 'nbf', 'auth_time'] and value is number %}
+                                        {{ value }}
+                                        <span class="text-gray-500 ml-2">({{ value | timestamp_to_datetime }})</span>
+                                        {% elif value is mapping %}
+                                        <pre class="whitespace-pre-wrap">{{ value | tojson(indent=2) }}</pre>
+                                        {% elif value is iterable and value is not string %}
+                                        {{ value | join(', ') }}
+                                        {% elif value is sameas true %}
+                                        <span class="text-green-600">true</span>
+                                        {% elif value is sameas false %}
+                                        <span class="text-red-600">false</span>
+                                        {% else %}
+                                        {{ value }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Signature -->
+                <div class="pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 class="font-semibold text-sm mb-2">Signature</h3>
+                    <p class="font-mono text-xs break-all bg-gray-100 dark:bg-gray-700 p-2 rounded">{{ state.access_token_decoded.signature }}</p>
                 </div>
             </div>
         </details>

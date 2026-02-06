@@ -49,6 +49,57 @@ def timestamp_to_datetime_filter(timestamp: int | float) -> str:
         return str(timestamp)
 
 
+# Standard OIDC/JWT claim descriptions
+_CLAIM_DESCRIPTIONS = {
+    "iss": "Token issuer (identity provider)",
+    "sub": "Subject identifier (unique user ID)",
+    "aud": "Intended audience (client ID)",
+    "exp": "Expiration time",
+    "iat": "Time token was issued",
+    "nbf": "Token not valid before this time",
+    "jti": "Unique token identifier",
+    "nonce": "Value to prevent replay attacks",
+    "auth_time": "Time of user authentication",
+    "acr": "Authentication context class reference",
+    "amr": "Authentication methods used",
+    "azp": "Authorized party (client that requested token)",
+    "at_hash": "Access token hash",
+    "c_hash": "Authorization code hash",
+    "name": "User's full name",
+    "given_name": "User's first/given name",
+    "family_name": "User's last/family name",
+    "middle_name": "User's middle name",
+    "nickname": "User's casual name",
+    "preferred_username": "User's preferred username",
+    "profile": "URL of user's profile page",
+    "picture": "URL of user's profile picture",
+    "website": "URL of user's website",
+    "email": "User's email address",
+    "email_verified": "Whether email has been verified",
+    "gender": "User's gender",
+    "birthdate": "User's date of birth",
+    "zoneinfo": "User's time zone",
+    "locale": "User's locale/language preference",
+    "phone_number": "User's phone number",
+    "phone_number_verified": "Whether phone has been verified",
+    "address": "User's address",
+    "updated_at": "Time profile was last updated",
+    "sid": "Session identifier",
+    "scope": "Granted scopes",
+    "client_id": "OAuth2 client identifier",
+    "typ": "Token type",
+    "realm_access": "Realm-level role access (Keycloak)",
+    "resource_access": "Resource-level role access (Keycloak)",
+    "allowed-origins": "Allowed CORS origins",
+}
+
+
+@oidc_bp.app_template_global("get_claim_description")
+def get_claim_description(claim: str) -> str:
+    """Get human-readable description for a JWT claim."""
+    return _CLAIM_DESCRIPTIONS.get(claim, "Custom claim")
+
+
 def get_base_url() -> str:
     """Get the base URL for this application."""
     scheme = request.scheme
