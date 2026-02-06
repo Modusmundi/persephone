@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Test Result #{{ result.id }} - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-6">
+        <div>
+            <a href="{{ url_for('history.index') }}" class="text-blue-500 hover:text-blue-600 text-sm mb-2 inline-block">&larr; Back to History</a>
+            <h1 class="text-2xl font-bold">{{ result.test_name }}</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">Test Result #{{ result.id }}</p>
+        </div>
+        <div class="flex space-x-2">
+            <form method="POST" action="{{ url_for('history.delete') }}" onsubmit="return confirm('Delete this test result?');">
+                <input type="hidden" name="id" value="{{ result.id }}">
+                <button type="submit" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm">
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Status Banner -->
+    <div class="mb-6 p-4 rounded-lg {% if result.status == 'passed' %}bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700{% elif result.status == 'failed' %}bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700{% else %}bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700{% endif %}">
+        <div class="flex items-center">
+            {% if result.status == 'passed' %}
+            <svg class="w-6 h-6 text-green-600 dark:text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            <span class="font-semibold text-green-800 dark:text-green-200">Test Passed</span>
+            {% elif result.status == 'failed' %}
+            <svg class="w-6 h-6 text-red-600 dark:text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            <span class="font-semibold text-red-800 dark:text-red-200">Test Failed</span>
+            {% else %}
+            <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <span class="font-semibold text-yellow-800 dark:text-yellow-200">Error Occurred</span>
+            {% endif %}
+        </div>
+        {% if result.error_message %}
+        <p class="mt-2 {% if result.status == 'passed' %}text-green-700 dark:text-green-300{% elif result.status == 'failed' %}text-red-700 dark:text-red-300{% else %}text-yellow-700 dark:text-yellow-300{% endif %}">
+            {{ result.error_message }}
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Test Details -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <!-- Basic Info Card -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Test Details</h2>
+            <dl class="space-y-3">
+                <div class="flex justify-between">
+                    <dt class="text-gray-500 dark:text-gray-400">Protocol</dt>
+                    <dd>
+                        <span class="px-2 py-1 text-xs rounded-full {% if result.test_type == 'oidc' %}bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200{% else %}bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200{% endif %}">
+                            {{ result.test_type.upper() }}
+                        </span>
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500 dark:text-gray-400">Identity Provider</dt>
+                    <dd class="font-medium">{{ result.idp_provider.display_name or result.idp_provider.name if result.idp_provider else '(unknown)' }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500 dark:text-gray-400">Test Name</dt>
+                    <dd class="font-medium text-right max-w-xs truncate">{{ result.test_name }}</dd>
+                </div>
+            </dl>
+        </div>
+
+        <!-- Timing Card -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Timing</h2>
+            <dl class="space-y-3">
+                <div class="flex justify-between">
+                    <dt class="text-gray-500 dark:text-gray-400">Started</dt>
+                    <dd class="font-medium">{{ result.started_at.strftime('%Y-%m-%d %H:%M:%S UTC') if result.started_at else 'N/A' }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500 dark:text-gray-400">Completed</dt>
+                    <dd class="font-medium">{{ result.completed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if result.completed_at else 'N/A' }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-gray-500 dark:text-gray-400">Duration</dt>
+                    <dd class="font-medium">{{ result.duration_ms }}ms{% if not result.duration_ms %}N/A{% endif %}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Error Details (if any) -->
+    {% if result.error_details %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold mb-4 text-red-600 dark:text-red-400">Error Details</h2>
+        <pre class="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm">{{ result.error_details | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Request Data -->
+    {% if result.request_data %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <details open>
+            <summary class="text-lg font-semibold mb-4 cursor-pointer">Request Data</summary>
+            <div class="mt-4">
+                {% if result.request_data.authorization_url %}
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Authorization URL</h3>
+                    <code class="text-xs bg-gray-100 dark:bg-gray-900 p-2 rounded block overflow-x-auto">{{ result.request_data.authorization_url }}</code>
+                </div>
+                {% endif %}
+
+                {% if result.request_data.client_id %}
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Client ID</h3>
+                    <code class="text-sm">{{ result.request_data.client_id }}</code>
+                </div>
+                {% endif %}
+
+                {% if result.request_data.redirect_uri %}
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Redirect URI</h3>
+                    <code class="text-sm">{{ result.request_data.redirect_uri }}</code>
+                </div>
+                {% endif %}
+
+                {% if result.request_data.scope %}
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Scopes</h3>
+                    <div class="flex flex-wrap gap-1">
+                        {% for scope in result.request_data.scope.split() %}
+                        <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs">{{ scope }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <details class="mt-4">
+                    <summary class="text-sm text-gray-500 dark:text-gray-400 cursor-pointer">Raw Request Data</summary>
+                    <pre class="mt-2 bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs">{{ result.request_data | tojson(indent=2) }}</pre>
+                </details>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    <!-- Response Data -->
+    {% if result.response_data %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <details open>
+            <summary class="text-lg font-semibold mb-4 cursor-pointer">Response Data</summary>
+            <div class="mt-4">
+                <!-- Tokens Section -->
+                {% if result.response_data.tokens %}
+                <div class="mb-6">
+                    <h3 class="text-md font-medium mb-2">Tokens Received</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% if result.response_data.tokens.access_token %}
+                        <div class="p-3 bg-gray-100 dark:bg-gray-900 rounded">
+                            <div class="text-sm font-medium text-green-600 dark:text-green-400 mb-1">Access Token</div>
+                            <code class="text-xs break-all">{{ result.response_data.tokens.access_token[:100] }}...</code>
+                        </div>
+                        {% endif %}
+                        {% if result.response_data.tokens.id_token %}
+                        <div class="p-3 bg-gray-100 dark:bg-gray-900 rounded">
+                            <div class="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">ID Token</div>
+                            <code class="text-xs break-all">{{ result.response_data.tokens.id_token[:100] }}...</code>
+                        </div>
+                        {% endif %}
+                        {% if result.response_data.tokens.refresh_token %}
+                        <div class="p-3 bg-gray-100 dark:bg-gray-900 rounded">
+                            <div class="text-sm font-medium text-purple-600 dark:text-purple-400 mb-1">Refresh Token</div>
+                            <code class="text-xs break-all">{{ result.response_data.tokens.refresh_token[:100] }}...</code>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Claims Section -->
+                {% if result.response_data.claims %}
+                <div class="mb-6">
+                    <h3 class="text-md font-medium mb-2">Token Claims</h3>
+                    <div class="bg-gray-100 dark:bg-gray-900 rounded p-4">
+                        <table class="min-w-full text-sm">
+                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                {% for key, value in result.response_data.claims.items() %}
+                                <tr>
+                                    <td class="py-2 pr-4 font-medium text-gray-600 dark:text-gray-400">{{ key }}</td>
+                                    <td class="py-2">
+                                        {% if value is mapping or value is iterable and value is not string %}
+                                        <code class="text-xs">{{ value | tojson }}</code>
+                                        {% else %}
+                                        {{ value }}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Validation Section -->
+                {% if result.response_data.validation %}
+                <div class="mb-6">
+                    <h3 class="text-md font-medium mb-2">Validation Results</h3>
+                    <div class="space-y-2">
+                        {% for check in result.response_data.validation.get('checks', []) %}
+                        <div class="flex items-center p-2 rounded {% if check.status == 'valid' %}bg-green-50 dark:bg-green-900/30{% elif check.status == 'invalid' %}bg-red-50 dark:bg-red-900/30{% elif check.status == 'warning' %}bg-yellow-50 dark:bg-yellow-900/30{% else %}bg-gray-50 dark:bg-gray-900{% endif %}">
+                            {% if check.status == 'valid' %}
+                            <svg class="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            {% elif check.status == 'invalid' %}
+                            <svg class="w-5 h-5 text-red-600 dark:text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            {% elif check.status == 'warning' %}
+                            <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                            {% else %}
+                            <svg class="w-5 h-5 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                            </svg>
+                            {% endif %}
+                            <div>
+                                <span class="font-medium">{{ check.name }}</span>
+                                {% if check.message %}
+                                <span class="text-gray-500 dark:text-gray-400 text-sm ml-2">{{ check.message }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <details class="mt-4">
+                    <summary class="text-sm text-gray-500 dark:text-gray-400 cursor-pointer">Raw Response Data</summary>
+                    <pre class="mt-2 bg-gray-100 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-xs">{{ result.response_data | tojson(indent=2) }}</pre>
+                </details>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    <!-- Export Single Result -->
+    <div class="flex justify-end space-x-2">
+        <form method="POST" action="{{ url_for('history.export') }}">
+            <input type="hidden" name="selected_ids" value="{{ result.id }}">
+            <input type="hidden" name="format" value="json">
+            <button type="submit" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm">
+                Export as JSON
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

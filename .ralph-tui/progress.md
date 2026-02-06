@@ -42,6 +42,14 @@ after each iteration and it's included in prompts for context.
 - No client_secret needed (public client flow)
 - Security warnings are mandatory - this flow is deprecated per OAuth 2.0 Security BCP
 
+### Test History Management Pattern
+- History CLI in `authtest/cli/history.py` with list/show/export/delete commands
+- History web routes in `authtest/web/routes/history.py` with history_bp blueprint
+- Date filters support absolute (YYYY-MM-DD) and relative durations (7d, 24h, 30m)
+- Pagination with filters preserved via url_for() parameter passing
+- Bulk operations: export to JSON/CSV, delete with filters
+- API endpoint `/history/api/results` for dynamic JavaScript updates
+
 ---
 
 ### OIDC Discovery Pattern
@@ -396,5 +404,39 @@ after each iteration and it's included in prompts for context.
   - SAML namespaces: saml=urn:oasis:names:tc:SAML:2.0:assertion, samlp=urn:oasis:names:tc:SAML:2.0:protocol
   - Token manipulation tools need prominent security warnings for authorized testing use
   - Flask session can store generated keys for use across manipulation operations
+---
+
+## 2026-02-05 - US-033
+- **What was implemented**: Test history management with searchable history, CLI commands, and web UI
+- **Files created**:
+  - `authtest/cli/history.py` - CLI commands: list, show, export, delete with filters (IdP, type, status, date range)
+  - `authtest/web/routes/history.py` - Web routes for history browsing, export, and bulk delete operations
+  - `authtest/web/templates/history/index.html` - History browser with filters, pagination, bulk selection
+  - `authtest/web/templates/history/show.html` - Detailed view of a single test result
+  - `authtest/web/templates/history/export.html` - Export configuration with bulk delete option
+- **Files modified**:
+  - `authtest/cli/main.py` - Added history command registration
+  - `authtest/web/routes/__init__.py` - Added history_bp blueprint registration
+  - `authtest/web/templates/index.html` - Added History card to dashboard
+- **Features implemented**:
+  - CLI: `authtest history list` - Searchable list with filters (--idp, --type, --status, --since, --until)
+  - CLI: `authtest history show <id>` - Detailed view of a test result with request/response data
+  - CLI: `authtest history export <file>` - Export to JSON/CSV with filters
+  - CLI: `authtest history delete` - Bulk delete with filters (--idp, --type, --status, --before, --ids, --all)
+  - Web: History browser with search, IdP/type/status filters, date range, pagination
+  - Web: Detailed result view with tokens, claims, validation checks
+  - Web: Bulk selection and export/delete operations
+  - Web: API endpoint for dynamic result fetching (/history/api/results)
+- **Acceptance Criteria Met**:
+  - [x] Searchable history by IdP, flow type, date, status
+  - [x] history list/show/export CLI commands
+  - [x] Web UI history browser with filters
+  - [x] Bulk export and delete operations
+- **Learnings:**
+  - Date filters support both absolute dates (YYYY-MM-DD) and relative durations (7d, 24h, 30m)
+  - Flask Response object with Content-Disposition header enables file downloads from POST forms
+  - SQLAlchemy's `delete(synchronize_session="fetch")` is needed when using filters with joins
+  - Pagination in templates requires passing filter params via url_for() to preserve state
+  - History link was already in sidebar (base.html) - just needed route implementation
 ---
 

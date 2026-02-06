@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Test History - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">Test History</h1>
+        <div class="flex space-x-2">
+            <a href="{{ url_for('history.export') }}" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+                Export Results
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="text-2xl font-bold">{{ stats.total }}</div>
+            <div class="text-gray-500 dark:text-gray-400 text-sm">Total Tests</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="text-2xl font-bold text-green-600">{{ stats.passed }}</div>
+            <div class="text-gray-500 dark:text-gray-400 text-sm">Passed</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="text-2xl font-bold text-red-600">{{ stats.failed }}</div>
+            <div class="text-gray-500 dark:text-gray-400 text-sm">Failed</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="text-2xl font-bold text-yellow-600">{{ stats.error }}</div>
+            <div class="text-gray-500 dark:text-gray-400 text-sm">Errors</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+        <form method="GET" action="{{ url_for('history.index') }}" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <!-- Search -->
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium mb-1">Search</label>
+                <input type="text" name="search" value="{{ filters.search }}"
+                       placeholder="Search test name..."
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+            </div>
+
+            <!-- IdP Filter -->
+            <div>
+                <label class="block text-sm font-medium mb-1">IdP</label>
+                <select name="idp" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">All IdPs</option>
+                    {% for idp in idps %}
+                    <option value="{{ idp.name }}" {% if filters.idp == idp.name %}selected{% endif %}>{{ idp.display_name or idp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Type Filter -->
+            <div>
+                <label class="block text-sm font-medium mb-1">Protocol</label>
+                <select name="type" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">All Types</option>
+                    <option value="saml" {% if filters.type == 'saml' %}selected{% endif %}>SAML</option>
+                    <option value="oidc" {% if filters.type == 'oidc' %}selected{% endif %}>OIDC</option>
+                </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div>
+                <label class="block text-sm font-medium mb-1">Status</label>
+                <select name="status" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">All Statuses</option>
+                    <option value="passed" {% if filters.status == 'passed' %}selected{% endif %}>Passed</option>
+                    <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>Failed</option>
+                    <option value="error" {% if filters.status == 'error' %}selected{% endif %}>Error</option>
+                </select>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex items-end space-x-2">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+                    Filter
+                </button>
+                <a href="{{ url_for('history.index') }}" class="bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md text-sm">
+                    Clear
+                </a>
+            </div>
+        </form>
+
+        <!-- Date Range (collapsible) -->
+        <details class="mt-4">
+            <summary class="text-sm text-gray-600 dark:text-gray-400 cursor-pointer">Date Range Filters</summary>
+            <form method="GET" action="{{ url_for('history.index') }}" class="mt-2 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Preserve other filters -->
+                <input type="hidden" name="search" value="{{ filters.search }}">
+                <input type="hidden" name="idp" value="{{ filters.idp }}">
+                <input type="hidden" name="type" value="{{ filters.type }}">
+                <input type="hidden" name="status" value="{{ filters.status }}">
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Since</label>
+                    <input type="date" name="since" value="{{ filters.since }}"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Until</label>
+                    <input type="date" name="until" value="{{ filters.until }}"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm">
+                        Apply Date Filter
+                    </button>
+                </div>
+            </form>
+        </details>
+    </div>
+
+    <!-- Results Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <form id="bulkForm" method="POST">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="selectAll" class="mr-2 rounded">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">Select All</span>
+                    </label>
+                    <span class="text-sm text-gray-500 dark:text-gray-400">
+                        {{ pagination.total }} result{% if pagination.total != 1 %}s{% endif %}
+                    </span>
+                </div>
+                <div class="flex space-x-2">
+                    <button type="button" onclick="exportSelected()" class="text-blue-500 hover:text-blue-600 text-sm">
+                        Export Selected
+                    </button>
+                    <button type="button" onclick="deleteSelected()" class="text-red-500 hover:text-red-600 text-sm">
+                        Delete Selected
+                    </button>
+                </div>
+            </div>
+
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-10">
+                            <span class="sr-only">Select</span>
+                        </th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Test</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">IdP</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Duration</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for result in results %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3">
+                            <input type="checkbox" name="selected" value="{{ result.id }}" class="result-checkbox rounded">
+                        </td>
+                        <td class="px-4 py-3">
+                            <a href="{{ url_for('history.show', test_id=result.id) }}" class="text-blue-500 hover:text-blue-600">
+                                {{ result.test_name[:50] }}{% if result.test_name|length > 50 %}...{% endif %}
+                            </a>
+                            {% if result.error_message %}
+                            <div class="text-xs text-red-500 mt-1">{{ result.error_message[:60] }}...</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm">
+                            {{ result.idp_provider.display_name or result.idp_provider.name if result.idp_provider else '(unknown)' }}
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs rounded-full {% if result.test_type == 'oidc' %}bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200{% else %}bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200{% endif %}">
+                                {{ result.test_type.upper() }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if result.status == 'passed' %}
+                            <span class="px-2 py-1 text-xs rounded-full bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">Passed</span>
+                            {% elif result.status == 'failed' %}
+                            <span class="px-2 py-1 text-xs rounded-full bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">Failed</span>
+                            {% else %}
+                            <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">Error</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                            {{ result.started_at.strftime('%Y-%m-%d %H:%M') if result.started_at else 'N/A' }}
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                            {{ result.duration_ms }}ms{% if result.duration_ms else 'N/A' %}
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <a href="{{ url_for('history.show', test_id=result.id) }}" class="text-blue-500 hover:text-blue-600 text-sm mr-2">View</a>
+                            <form method="POST" action="{{ url_for('history.delete') }}" class="inline" onsubmit="return confirm('Delete this test result?');">
+                                <input type="hidden" name="id" value="{{ result.id }}">
+                                <button type="submit" class="text-red-500 hover:text-red-600 text-sm">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                            No test results found.
+                            {% if filters.idp or filters.type or filters.status or filters.search %}
+                            <a href="{{ url_for('history.index') }}" class="text-blue-500 hover:text-blue-600 ml-1">Clear filters</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </form>
+
+        <!-- Pagination -->
+        {% if pagination.total_pages > 1 %}
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
+                Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 }} - {{ min(pagination.page * pagination.per_page, pagination.total) }} of {{ pagination.total }}
+            </div>
+            <div class="flex space-x-2">
+                {% if pagination.page > 1 %}
+                <a href="{{ url_for('history.index', page=pagination.page - 1, **filters) }}" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Previous
+                </a>
+                {% endif %}
+
+                {% for p in range(1, pagination.total_pages + 1) %}
+                    {% if p == pagination.page %}
+                    <span class="px-3 py-1 bg-blue-500 text-white rounded-md text-sm">{{ p }}</span>
+                    {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+                    <a href="{{ url_for('history.index', page=p, **filters) }}" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                        {{ p }}
+                    </a>
+                    {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+                    <span class="px-2">...</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if pagination.page < pagination.total_pages %}
+                <a href="{{ url_for('history.index', page=pagination.page + 1, **filters) }}" class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Next
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Select all checkbox
+document.getElementById('selectAll').addEventListener('change', function() {
+    document.querySelectorAll('.result-checkbox').forEach(cb => {
+        cb.checked = this.checked;
+    });
+});
+
+// Get selected IDs
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.result-checkbox:checked'))
+        .map(cb => cb.value)
+        .join(',');
+}
+
+// Export selected
+function exportSelected() {
+    const ids = getSelectedIds();
+    if (!ids) {
+        alert('Please select at least one result to export.');
+        return;
+    }
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("history.export") }}';
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'selected_ids';
+    input.value = ids;
+    form.appendChild(input);
+    const formatInput = document.createElement('input');
+    formatInput.type = 'hidden';
+    formatInput.name = 'format';
+    formatInput.value = 'json';
+    form.appendChild(formatInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Delete selected
+function deleteSelected() {
+    const ids = getSelectedIds();
+    if (!ids) {
+        alert('Please select at least one result to delete.');
+        return;
+    }
+    if (!confirm('Delete ' + ids.split(',').length + ' selected result(s)? This cannot be undone.')) {
+        return;
+    }
+    // Create form and submit
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("history.delete") }}';
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'selected_ids';
+    input.value = ids;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
+{% endblock %}

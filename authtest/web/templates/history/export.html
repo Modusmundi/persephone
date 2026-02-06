@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Export Test History - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <a href="{{ url_for('history.index') }}" class="text-blue-500 hover:text-blue-600 text-sm">&larr; Back to History</a>
+        <h1 class="text-2xl font-bold mt-2">Export Test History</h1>
+        <p class="text-gray-500 dark:text-gray-400 mt-1">Export test results to JSON or CSV format.</p>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <form method="POST" action="{{ url_for('history.export') }}">
+            <!-- Statistics -->
+            <div class="mb-6 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg">
+                <div class="text-sm text-gray-500 dark:text-gray-400">
+                    Total test results available: <span class="font-semibold text-gray-900 dark:text-gray-100">{{ total_count }}</span>
+                </div>
+            </div>
+
+            <!-- Format Selection -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium mb-2">Export Format</label>
+                <div class="flex space-x-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="format" value="json" checked class="mr-2">
+                        <span>JSON</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(full data)</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="format" value="csv" class="mr-2">
+                        <span>CSV</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(summary only)</span>
+                    </label>
+                </div>
+            </div>
+
+            <hr class="my-6 border-gray-200 dark:border-gray-700">
+
+            <h2 class="text-lg font-medium mb-4">Filter Results (Optional)</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Leave all filters empty to export all results.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- IdP Filter -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Identity Provider</label>
+                    <select name="idp" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        <option value="">All IdPs</option>
+                        {% for idp in idps %}
+                        <option value="{{ idp.name }}">{{ idp.display_name or idp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Protocol Filter -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Protocol Type</label>
+                    <select name="type" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        <option value="">All Types</option>
+                        <option value="saml">SAML</option>
+                        <option value="oidc">OIDC</option>
+                    </select>
+                </div>
+
+                <!-- Status Filter -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Status</label>
+                    <select name="status" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        <option value="">All Statuses</option>
+                        <option value="passed">Passed</option>
+                        <option value="failed">Failed</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Date Range -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Since Date</label>
+                    <input type="date" name="since"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Until Date</label>
+                    <input type="date" name="until"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                </div>
+            </div>
+
+            <!-- Submit -->
+            <div class="mt-6 flex justify-end space-x-2">
+                <a href="{{ url_for('history.index') }}" class="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-md">
+                    Cancel
+                </a>
+                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md">
+                    Export Results
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Bulk Delete Section -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mt-6 border-l-4 border-red-500">
+        <h2 class="text-lg font-medium mb-2 text-red-600 dark:text-red-400">Bulk Delete</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Permanently delete multiple test results. This action cannot be undone.
+        </p>
+
+        <form method="POST" action="{{ url_for('history.bulk_delete') }}" onsubmit="return confirm('Are you sure you want to delete these test results? This action cannot be undone.');">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <!-- IdP Filter -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Identity Provider</label>
+                    <select name="idp" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        <option value="">All IdPs</option>
+                        {% for idp in idps %}
+                        <option value="{{ idp.name }}">{{ idp.display_name or idp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Status Filter -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Status</label>
+                    <select name="status" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        <option value="">All Statuses</option>
+                        <option value="passed">Passed</option>
+                        <option value="failed">Failed</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+
+                <!-- Before Date -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Delete results before date</label>
+                    <input type="date" name="before"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                </div>
+
+                <!-- Protocol Filter -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Protocol Type</label>
+                    <select name="type" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                        <option value="">All Types</option>
+                        <option value="saml">SAML</option>
+                        <option value="oidc">OIDC</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Delete All Option -->
+            <div class="mb-4">
+                <label class="flex items-center text-red-600 dark:text-red-400">
+                    <input type="checkbox" name="delete_all" value="true" class="mr-2 rounded">
+                    <span class="text-sm font-medium">Delete ALL test results (ignores filters above)</span>
+                </label>
+            </div>
+
+            <button type="submit" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md">
+                Delete Matching Results
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
