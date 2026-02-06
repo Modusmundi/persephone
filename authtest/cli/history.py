@@ -395,7 +395,7 @@ def _redact_tokens_from_data(data: dict[str, Any]) -> dict[str, Any]:
 @click.option(
     "--format",
     "export_format",
-    type=click.Choice(["json", "csv", "pdf"]),
+    type=click.Choice(["json", "csv", "pdf", "html"]),
     default="json",
     help="Export format (default: json)",
 )
@@ -462,6 +462,9 @@ def history_export(
 
         # Export PDF with company details
         authtest history export report.pdf --format pdf --company "Acme Corp" --project "SSO Audit"
+
+        # Export as standalone HTML (works offline, interactive)
+        authtest history export report.html --format html
 
         # Export with filters
         authtest history export report.json --idp my-okta --since 7d
@@ -576,7 +579,7 @@ def history_export(
                     # Exclude complex JSON fields for CSV
                     csv_row = {k: v for k, v in row.items() if k not in ["error_details", "request_data", "response_data"]}
                     writer.writerow(csv_row)
-        else:  # pdf
+        elif export_format == "pdf":
             from authtest.reports import ReportMetadata, generate_pdf_report
 
             metadata = ReportMetadata(
@@ -587,6 +590,17 @@ def history_export(
             )
             pdf_bytes = generate_pdf_report(export_data, metadata)
             output_path.write_bytes(pdf_bytes)
+        else:  # html
+            from authtest.reports import HTMLReportMetadata, generate_html_report
+
+            html_metadata = HTMLReportMetadata(
+                company_name=company_name or "AuthTest Security Assessment",
+                project_name=project_name,
+                assessor_name=assessor_name,
+                include_tokens=include_tokens,
+            )
+            html_content = generate_html_report(export_data, html_metadata)
+            output_path.write_text(html_content, encoding="utf-8")
 
         result = {
             "status": "exported",

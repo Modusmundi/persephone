@@ -334,7 +334,7 @@ def export() -> str | Response | WerkzeugResponse:
                 mimetype="text/csv",
                 headers={"Content-Disposition": f"attachment; filename=authtest_history_{timestamp}.csv"},
             )
-        else:  # pdf
+        elif export_format == "pdf":
             from authtest.reports import ReportMetadata, generate_pdf_report
 
             # Get PDF-specific form fields
@@ -354,6 +354,27 @@ def export() -> str | Response | WerkzeugResponse:
                 pdf_bytes,
                 mimetype="application/pdf",
                 headers={"Content-Disposition": f"attachment; filename=authtest_report_{timestamp}.pdf"},
+            )
+        else:  # html
+            from authtest.reports import HTMLReportMetadata, generate_html_report
+
+            # Get HTML-specific form fields
+            company_name = request.form.get("company_name", "")
+            project_name = request.form.get("project_name", "")
+            assessor_name = request.form.get("assessor_name", "")
+
+            html_metadata = HTMLReportMetadata(
+                company_name=company_name or "AuthTest Security Assessment",
+                project_name=project_name,
+                assessor_name=assessor_name,
+                include_tokens=include_tokens,
+            )
+            html_content = generate_html_report(export_data, html_metadata)
+
+            return Response(
+                html_content,
+                mimetype="text/html",
+                headers={"Content-Disposition": f"attachment; filename=authtest_report_{timestamp}.html"},
             )
     finally:
         db_session.close()

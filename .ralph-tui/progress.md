@@ -71,6 +71,17 @@ after each iteration and it's included in prompts for context.
 - Flask Response with mimetype="application/pdf" and Content-Disposition for download
 - Token redaction shows partial values (first/last 8 chars) for identification while hiding secrets
 
+### HTML Report Generation Pattern
+- Reports module in `authtest/reports/` with `html.py` for standalone HTML report generation
+- HTMLReportMetadata dataclass mirrors ReportMetadata (company_name, project_name, assessor_name, include_tokens)
+- generate_html_report(results, metadata) takes list of result dicts and returns HTML string
+- Self-contained with embedded CSS - no external CDN or stylesheet dependencies
+- JSON syntax highlighting using regex on html-escaped content for security
+- Interactive expand/collapse via JavaScript toggleSection() and classList manipulation
+- HTML5 `<details>` element for native disclosure widgets (show full token, raw data)
+- Print-optimized with @media print rules (hide controls, expand all, avoid page breaks)
+- Flask Response with mimetype="text/html" and Content-Disposition for download
+
 ---
 
 ### OIDC Discovery Pattern
@@ -559,5 +570,38 @@ after each iteration and it's included in prompts for context.
   - BytesIO buffer used for write_pdf() output, then .getvalue() for bytes
   - CSS flexbox works in WeasyPrint for layout (summary cards, token grid)
   - Token redaction shows partial values (first/last 8 chars) for identification while hiding sensitive data
+---
+
+## 2026-02-06 - US-024
+- **What was implemented**: Standalone HTML report generation with embedded CSS and interactive features
+- **Files created/modified**:
+  - `authtest/reports/html.py` (NEW) - Full implementation with HTMLReportMetadata dataclass, generate_html_report(), generate_single_result_html(), JSON syntax highlighting, collapsible sections
+  - `authtest/reports/__init__.py` - Added HTMLReportMetadata and HTML generation function exports
+  - `authtest/cli/history.py` - Added "html" format option to export command
+  - `authtest/web/routes/history.py` - Added HTML format handling to export route
+  - `authtest/web/templates/history/export.html` - Added HTML format radio button, updated JS to show report options for both PDF and HTML
+- **Features implemented**:
+  - Self-contained HTML with all CSS embedded (no external dependencies)
+  - JSON syntax highlighting with color-coded strings, numbers, booleans, and nulls
+  - Interactive expand/collapse sections for Request Details, Tokens, Claims, and Validation
+  - Expand All / Collapse All / Print Report control buttons
+  - Professional styling with gradient header, summary cards, and status-colored result cards
+  - Print-optimized CSS with @media print rules
+  - Token truncation with "Show full token" disclosure for long tokens
+  - Validation check summary with passed/failed/warning counts
+  - Works completely offline - no CDN or external resource dependencies
+- **Acceptance Criteria Met**:
+  - [x] Self-contained HTML with embedded CSS
+  - [x] Syntax highlighting preserved (JSON highlighting for claims and raw data)
+  - [x] Interactive elements for expanding/collapsing sections
+  - [x] Works offline without external dependencies
+- **Learnings:**
+  - HTML escape required for all user content before embedding in template (html.escape())
+  - JSON syntax highlighting with regex - must escape HTML first, then apply regex for span wrapping
+  - CSS Grid and Flexbox work well for responsive report layouts
+  - HTML `<details>` element provides native expand/collapse without JavaScript
+  - JavaScript toggleSection() pattern with classList.add/remove for custom expand/collapse
+  - Use distinct variable names (html_metadata vs metadata) when mypy complains about type conflicts in if/else branches
+  - Ruff tries to parse Jinja templates as Python - exclude .html files from ruff checks
 ---
 
