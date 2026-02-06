@@ -704,7 +704,7 @@ def idp_show(name: str, output_json: bool) -> None:
 @click.argument("name")
 @click.option(
     "--preset",
-    type=click.Choice(["keycloak", "okta"]),
+    type=click.Choice(["keycloak", "okta", "azure_ad"]),
     required=True,
     help="IdP preset to use",
 )
@@ -720,6 +720,8 @@ def idp_show(name: str, output_json: bool) -> None:
 @click.option("--okta-domain", help="Okta domain (e.g., dev-123456.okta.com)")
 @click.option("--app-id", help="Okta SAML app ID (optional, for app-specific URLs)")
 @click.option("--authorization-server", default="default", help="Okta authorization server ID (default: 'default')")
+@click.option("--tenant-id", help="Azure AD tenant ID, domain, or special value (common, organizations, consumers)")
+@click.option("--use-v2-endpoints/--use-v1-endpoints", default=True, help="Azure AD: Use v2.0 endpoints (default: v2.0)")
 @click.option("--display-name", help="Display name for the IdP")
 @click.option("--discover/--no-discover", default=True, help="Auto-discover and fetch metadata/config")
 @json_option
@@ -732,6 +734,8 @@ def idp_from_preset(
     okta_domain: str | None,
     app_id: str | None,
     authorization_server: str,
+    tenant_id: str | None,
+    use_v2_endpoints: bool,
     display_name: str | None,
     discover: bool,
     output_json: bool,
@@ -739,7 +743,7 @@ def idp_from_preset(
     """Add an Identity Provider from a preset configuration.
 
     This command creates an IdP configuration using pre-defined templates
-    for common identity providers like Keycloak and Okta.
+    for common identity providers like Keycloak, Okta, and Azure AD.
 
     Examples:
 
@@ -769,6 +773,25 @@ def idp_from_preset(
             --okta-domain dev-123456.okta.com \\
             --app-id exk12345
 
+        # Add Azure AD OIDC IdP (single tenant)
+        authtest config idp from-preset my-azure \\
+            --preset azure_ad \\
+            --type oidc \\
+            --tenant-id contoso.onmicrosoft.com
+
+        # Add Azure AD OIDC IdP (multi-tenant)
+        authtest config idp from-preset my-azure-multi \\
+            --preset azure_ad \\
+            --type oidc \\
+            --tenant-id common
+
+        # Add Azure AD with v1.0 endpoints (legacy)
+        authtest config idp from-preset my-azure-v1 \\
+            --preset azure_ad \\
+            --type oidc \\
+            --tenant-id contoso.onmicrosoft.com \\
+            --use-v1-endpoints
+
         # Add without fetching metadata
         authtest config idp from-preset my-keycloak \\
             --preset keycloak \\
@@ -790,6 +813,9 @@ def idp_from_preset(
         # Allow base-url as fallback for okta-domain
         if not okta_domain:
             okta_domain = base_url
+    elif preset == "azure_ad":
+        if not tenant_id:
+            error_result("--tenant-id is required for the azure_ad preset.", output_json)
 
     try:
         database = Database()
@@ -823,6 +849,18 @@ def idp_from_preset(
                 preset_config = get_okta_saml_preset(okta_domain, app_id)  # type: ignore[arg-type]
             else:
                 preset_config = get_okta_oidc_preset(okta_domain, authorization_server)  # type: ignore[arg-type]
+        elif preset == "azure_ad":
+            from authtest.idp_presets.azure_ad import (
+                get_oidc_preset as get_azure_ad_oidc_preset,
+            )
+            from authtest.idp_presets.azure_ad import (
+                get_saml_preset as get_azure_ad_saml_preset,
+            )
+
+            if idp_type == "saml":
+                preset_config = get_azure_ad_saml_preset(tenant_id)  # type: ignore[arg-type]
+            else:
+                preset_config = get_azure_ad_oidc_preset(tenant_id, use_v2_endpoints)  # type: ignore[arg-type]
         else:
             session.close()
             database.close()
@@ -956,14 +994,15 @@ def idp_from_preset(
 @idp.command("setup-guide")
 @click.option(
     "--preset",
-    type=click.Choice(["keycloak", "okta"]),
+    type=click.Choice(["keycloak", "okta", "azure_ad"]),
     required=True,
     help="IdP preset for setup guide",
 )
 @click.option("--base-url", help="IdP server base URL (for customized URLs)")
 @click.option("--realm", help="Keycloak realm name (for customized URLs)")
 @click.option("--okta-domain", help="Okta domain (for customized URLs)")
-def idp_setup_guide(preset: str, base_url: str | None, realm: str | None, okta_domain: str | None) -> None:
+@click.option("--tenant-id", help="Azure AD tenant ID (for customized URLs)")
+def idp_setup_guide(preset: str, base_url: str | None, realm: str | None, okta_domain: str | None, tenant_id: str | None) -> None:
     """Show setup guide for an IdP preset.
 
     Displays step-by-step instructions for configuring the IdP to work
@@ -985,6 +1024,13 @@ def idp_setup_guide(preset: str, base_url: str | None, realm: str | None, okta_d
         # Show Okta guide with customized domain
         authtest config idp setup-guide --preset okta \\
             --okta-domain dev-123456.okta.com
+
+        # Show Azure AD setup guide
+        authtest config idp setup-guide --preset azure_ad
+
+        # Show Azure AD guide with customized tenant
+        authtest config idp setup-guide --preset azure_ad \\
+            --tenant-id contoso.onmicrosoft.com
     """
     if preset == "keycloak":
         from authtest.idp_presets.keycloak import get_setup_guide
@@ -997,6 +1043,11 @@ def idp_setup_guide(preset: str, base_url: str | None, realm: str | None, okta_d
         # Support both --okta-domain and --base-url for convenience
         domain = okta_domain or base_url
         guide = get_okta_setup_guide(domain)
+        click.echo(guide)
+    elif preset == "azure_ad":
+        from authtest.idp_presets.azure_ad import get_setup_guide as get_azure_ad_setup_guide
+
+        guide = get_azure_ad_setup_guide(tenant_id)
         click.echo(guide)
     else:
         raise click.ClickException(f"Unknown preset: {preset}")

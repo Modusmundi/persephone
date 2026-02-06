@@ -7,12 +7,26 @@ configuration endpoints.
 Available presets:
 - keycloak: Red Hat Keycloak / RH-SSO
 - okta: Okta Identity
+- azure_ad: Microsoft Entra ID (Azure AD)
 
 Discovery functions:
 - fetch_saml_metadata: Fetch and parse SAML IdP metadata
 - fetch_oidc_discovery: Fetch OIDC configuration from well-known endpoint
 """
 
+from authtest.idp_presets.azure_ad import (
+    AZURE_AD_SETUP_GUIDE,
+    AzureADConfig,
+)
+from authtest.idp_presets.azure_ad import (
+    get_oidc_preset as get_azure_ad_oidc_preset,
+)
+from authtest.idp_presets.azure_ad import (
+    get_saml_preset as get_azure_ad_saml_preset,
+)
+from authtest.idp_presets.azure_ad import (
+    get_setup_guide as get_azure_ad_setup_guide,
+)
 from authtest.idp_presets.discovery import (
     OIDCDiscoveryResult,
     SAMLMetadataResult,
@@ -66,6 +80,12 @@ __all__ = [
     "get_okta_oidc_preset",
     "get_okta_setup_guide",
     "OKTA_SETUP_GUIDE",
+    # Azure AD preset
+    "AzureADConfig",
+    "get_azure_ad_saml_preset",
+    "get_azure_ad_oidc_preset",
+    "get_azure_ad_setup_guide",
+    "AZURE_AD_SETUP_GUIDE",
 ]
 
 
@@ -86,8 +106,15 @@ PRESETS = {
         "optional": ["app_id", "authorization_server"],
         "supports": ["saml", "oidc"],
     },
+    "azure_ad": {
+        "name": "Azure AD / Entra ID",
+        "description": "Microsoft Entra ID (formerly Azure AD)",
+        "module": "authtest.idp_presets.azure_ad",
+        "requires": ["tenant_id"],
+        "optional": ["use_v2_endpoints"],
+        "supports": ["saml", "oidc"],
+    },
     # Future presets
-    # "azure_ad": {...},
     # "auth0": {...},
 }
 

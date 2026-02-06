@@ -162,3 +162,28 @@ after each iteration and it's included in prompts for context.
   - Default name_id_format for Okta SAML is emailAddress, unlike Keycloak's persistent
 ---
 
+## 2026-02-05 - US-017
+- **What was implemented**: Azure AD / Entra ID preset with OIDC and SAML support
+- **Files created/modified**:
+  - `authtest/idp_presets/azure_ad.py` (NEW) - Full implementation with AzureADConfig dataclass, get_saml_preset(), get_oidc_preset(), AZURE_AD_SETUP_GUIDE, get_setup_guide()
+  - `authtest/idp_presets/__init__.py` - Added Azure AD exports and PRESETS registry entry with 'azure_ad' key
+  - `authtest/cli/config.py` - Updated `from-preset` and `setup-guide` commands with Azure AD options: --tenant-id, --use-v2-endpoints/--use-v1-endpoints
+- **Features implemented**:
+  - AzureADConfig dataclass with all OIDC and SAML endpoints as properties
+  - Support for v2.0 endpoints (default, recommended) and v1.0 (legacy)
+  - Multi-tenant configuration options: single-tenant (GUID/domain), "common", "organizations", "consumers"
+  - Tenant type detection in settings (single-tenant, multi-tenant-all, multi-tenant-work-school, personal-accounts)
+  - OIDC support with Microsoft identity platform v2.0 endpoints
+  - SAML support with federation metadata URL pattern
+  - Comprehensive setup guide with Azure Portal instructions, OIDC/SAML configuration, and troubleshooting
+  - CLI integration with full preset workflow support
+- **Learnings:**
+  - Azure AD uses `login.microsoftonline.com` as the base URL for all tenants
+  - v2.0 issuer format: `https://login.microsoftonline.com/{tenant}/v2.0`
+  - v1.0 issuer format: `https://sts.windows.net/{tenant}/`
+  - SAML entity ID uses `sts.windows.net` domain, not `login.microsoftonline.com`
+  - UserInfo endpoint for Azure AD is via Microsoft Graph: `https://graph.microsoft.com/oidc/userinfo`
+  - Multi-tenant values (common, organizations, consumers) use same URL pattern but allow different account types
+  - Federation metadata uses XML format at `/federationmetadata/2007-06/federationmetadata.xml`
+---
+
