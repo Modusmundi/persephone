@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 from authtest.core.oidc.flows import (
     AuthorizationCodeFlow,
     ClientCredentialsFlow,
+    ImplicitFlow,
     OIDCFlowState,
     OIDCFlowStatus,
 )
@@ -483,4 +484,233 @@ def cancel_client_credentials() -> WerkzeugResponse:
     """Cancel an in-progress client credentials flow."""
     session.pop(OIDC_CC_FLOW_STATE_KEY, None)
     flash("Client Credentials test cancelled", "info")
+    return redirect(url_for("oidc.index"))
+
+
+# Session key for implicit flow state
+OIDC_IMPLICIT_FLOW_STATE_KEY = "oidc_implicit_flow_state"
+
+
+@oidc_bp.route("/implicit", methods=["GET", "POST"])
+def implicit() -> str | WerkzeugResponse:
+    """Implicit flow test page (LEGACY - NOT RECOMMENDED)."""
+    if request.method == "GET":
+        # Show IdP selection or preflight if IdP already selected
+        idp_id = request.args.get("idp_id", type=int)
+        if not idp_id:
+            return redirect(url_for("oidc.index"))
+
+        db = get_database()
+        db_session = db.get_session()
+
+        try:
+            idp = db_session.query(IdPProvider).get(idp_id)
+            if not idp or idp.idp_type != IdPType.OIDC:
+                flash("Invalid IdP selected", "error")
+                return redirect(url_for("oidc.index"))
+
+            # Get client credentials (only need client_id for implicit flow)
+            client_id, _ = get_client_config(idp)
+
+            if not client_id:
+                flash(
+                    "No client credentials configured for this IdP. "
+                    "Please configure client_id in IdP settings or create a Client Config.",
+                    "error",
+                )
+                return redirect(url_for("oidc.index"))
+
+            # Start the flow and run preflight checks
+            base_url = get_base_url()
+            flow = ImplicitFlow(
+                idp=idp,
+                db=db,
+                client_id=client_id,
+                base_url=base_url,
+            )
+            state = flow.start_flow()
+
+            # Store state in session
+            session[OIDC_IMPLICIT_FLOW_STATE_KEY] = state.to_dict()
+
+            return render_template(
+                "oidc/implicit.html",
+                idp=idp,
+                state=state,
+                preflight=state.preflight,
+            )
+        finally:
+            db_session.close()
+
+    # POST - user confirmed, initiate authorization
+    state_dict = session.get(OIDC_IMPLICIT_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active flow found", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = OIDCFlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        # Get client credentials
+        client_id, _ = get_client_config(idp)
+
+        base_url = get_base_url()
+        flow = ImplicitFlow(
+            idp=idp,
+            db=db,
+            client_id=client_id,
+            base_url=base_url,
+        )
+
+        # Get options from form
+        response_type = request.form.get("response_type", "id_token token")
+        prompt = request.form.get("prompt") or None
+        login_hint = request.form.get("login_hint") or None
+
+        state.options["response_type"] = response_type
+        state.options["prompt"] = prompt
+        state.options["login_hint"] = login_hint
+
+        # Create authorization request
+        state, authorization_url = flow.create_authorization_request(state)
+
+        if state.status == OIDCFlowStatus.FAILED:
+            flash(state.error or "Failed to create authorization request", "error")
+            return render_template(
+                "oidc/implicit.html",
+                idp=idp,
+                state=state,
+                preflight=state.preflight,
+            )
+
+        # Update session state
+        session[OIDC_IMPLICIT_FLOW_STATE_KEY] = state.to_dict()
+
+        # Redirect to IdP
+        return redirect(authorization_url)
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/implicit/callback")
+def implicit_callback() -> str | WerkzeugResponse:
+    """Handle the implicit flow callback - this page extracts tokens from URL fragment.
+
+    Since URL fragments are not sent to the server, this page includes JavaScript
+    to extract the tokens from the fragment and submit them to the process endpoint.
+    """
+    # Check if we have an active flow
+    state_dict = session.get(OIDC_IMPLICIT_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active Implicit flow found. Please start a new test.", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = OIDCFlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        # Render a page with JavaScript to extract tokens from fragment
+        return render_template(
+            "oidc/implicit_callback.html",
+            idp=idp,
+            state=state,
+        )
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/implicit/process", methods=["POST"])
+def implicit_process() -> str | WerkzeugResponse:
+    """Process the tokens extracted from the URL fragment by client-side JavaScript."""
+    state_dict = session.get(OIDC_IMPLICIT_FLOW_STATE_KEY)
+    if not state_dict:
+        flash("No active Implicit flow found. Please start a new test.", "error")
+        return redirect(url_for("oidc.index"))
+
+    state = OIDCFlowState.from_dict(state_dict)
+
+    db = get_database()
+    db_session = db.get_session()
+
+    try:
+        idp = db_session.query(IdPProvider).get(state.idp_id)
+        if not idp:
+            flash("IdP not found", "error")
+            return redirect(url_for("oidc.index"))
+
+        # Get client credentials
+        client_id, _ = get_client_config(idp)
+
+        base_url = get_base_url()
+        flow = ImplicitFlow(
+            idp=idp,
+            db=db,
+            client_id=client_id,
+            base_url=base_url,
+        )
+
+        # Get fragment parameters from form
+        access_token = request.form.get("access_token") or None
+        id_token = request.form.get("id_token") or None
+        token_type = request.form.get("token_type") or None
+        expires_in_str = request.form.get("expires_in")
+        expires_in = int(expires_in_str) if expires_in_str else None
+        scope = request.form.get("scope") or None
+        error = request.form.get("error") or None
+        error_description = request.form.get("error_description") or None
+        returned_state = request.form.get("state") or None
+
+        # Process the fragment response
+        state = flow.process_fragment_response(
+            state=state,
+            access_token=access_token,
+            id_token=id_token,
+            token_type=token_type,
+            expires_in=expires_in,
+            scope=scope,
+            error=error,
+            error_description=error_description,
+            returned_state=returned_state,
+        )
+
+        # Record the result
+        result_id = flow.record_result(state)
+
+        # Get the flow result for display
+        result = flow.get_flow_result(state)
+
+        # Clear the flow state
+        session.pop(OIDC_IMPLICIT_FLOW_STATE_KEY, None)
+
+        return render_template(
+            "oidc/implicit_result.html",
+            idp=idp,
+            state=state,
+            result=result,
+            result_id=result_id,
+        )
+    finally:
+        db_session.close()
+
+
+@oidc_bp.route("/implicit/cancel", methods=["POST"])
+def cancel_implicit() -> WerkzeugResponse:
+    """Cancel an in-progress implicit flow."""
+    session.pop(OIDC_IMPLICIT_FLOW_STATE_KEY, None)
+    flash("Implicit flow test cancelled", "info")
     return redirect(url_for("oidc.index"))

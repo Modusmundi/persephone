@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Implicit Flow - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">Implicit Flow Test</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Testing against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="mb-6">
+        {% for category, message in messages %}
+        <div class="p-4 rounded-lg mb-2 {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% else %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Security Warning Banner -->
+    <div class="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg p-4 mb-6">
+        <div class="flex items-start">
+            <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400 mr-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div>
+                <h3 class="font-bold text-yellow-700 dark:text-yellow-300">Security Warning: Deprecated Flow</h3>
+                <p class="text-sm text-yellow-600 dark:text-yellow-400 mt-1">
+                    The Implicit flow is <strong>deprecated</strong> and should <strong>NOT</strong> be used for new applications.
+                    This flow exposes tokens in the URL fragment, which can lead to token leakage through:
+                </p>
+                <ul class="text-sm text-yellow-600 dark:text-yellow-400 list-disc list-inside mt-2">
+                    <li>Browser history</li>
+                    <li>Referrer headers</li>
+                    <li>Server access logs</li>
+                    <li>Shared computers or devices</li>
+                </ul>
+                <p class="text-sm text-yellow-700 dark:text-yellow-300 mt-2 font-semibold">
+                    Recommendation: Use Authorization Code flow with PKCE instead.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pre-flight Checklist -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Pre-flight Checklist</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                Verifying configuration before initiating authorization
+            </p>
+        </div>
+        <div class="p-4">
+            {% if preflight %}
+            <ul class="space-y-3">
+                {% for check in preflight.checks %}
+                <li class="flex items-start">
+                    {% if check.passed %}
+                    <svg class="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    {% endif %}
+                    <div class="flex-1">
+                        <p class="font-medium {% if check.passed %}text-green-700 dark:text-green-400{% else %}text-red-700 dark:text-red-400{% endif %}">
+                            {{ check.name }}
+                        </p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ check.description }}</p>
+                        {% if check.details %}
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1 font-mono truncate">{{ check.details }}</p>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+
+            {% if preflight.warnings %}
+            <div class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
+                <p class="font-medium text-yellow-700 dark:text-yellow-400 text-sm">Warnings:</p>
+                <ul class="mt-1 text-sm text-yellow-600 dark:text-yellow-300 list-disc list-inside">
+                    {% for warning in preflight.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Overall Status -->
+            <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                {% if preflight.all_passed %}
+                <div class="flex items-center text-green-600 dark:text-green-400">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-semibold">Ready to test</span>
+                </div>
+                {% else %}
+                <div class="flex items-center text-red-600 dark:text-red-400">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-semibold">Configuration issues detected</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Test Options -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Test Options</h2>
+        </div>
+        <form action="{{ url_for('oidc.implicit') }}" method="POST" class="p-4">
+            <div class="space-y-4">
+                <!-- Response Type -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Response Type</label>
+                    <select
+                        name="response_type"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="id_token token" selected>id_token token - Both ID and Access tokens</option>
+                        <option value="id_token">id_token - ID token only</option>
+                        <option value="token">token - Access token only</option>
+                    </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Determines which tokens are returned in the URL fragment
+                    </p>
+                </div>
+
+                <!-- Prompt Parameter -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Prompt</label>
+                    <select
+                        name="prompt"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="">Default (no prompt parameter)</option>
+                        <option value="login">login - Force re-authentication</option>
+                        <option value="consent">consent - Force consent screen</option>
+                        <option value="select_account">select_account - Account selection</option>
+                        <option value="none">none - Silent authentication only</option>
+                    </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Controls the authentication UX at the IdP
+                    </p>
+                </div>
+
+                <!-- Login Hint -->
+                <div>
+                    <label class="block text-sm font-medium mb-2">Login Hint (optional)</label>
+                    <input
+                        type="text"
+                        name="login_hint"
+                        placeholder="user@example.com"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Pre-populate the login field at the IdP
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex space-x-4">
+                {% if preflight and preflight.all_passed %}
+                <button
+                    type="submit"
+                    class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 px-6 rounded-md transition-colors"
+                >
+                    Start Implicit Flow
+                </button>
+                {% else %}
+                <button
+                    type="submit"
+                    class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 px-6 rounded-md transition-colors opacity-50 cursor-not-allowed"
+                    disabled
+                >
+                    Start Implicit Flow
+                </button>
+                {% endif %}
+                <a
+                    href="{{ url_for('oidc.index') }}"
+                    class="bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+                >
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- IdP Configuration -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">IdP Configuration</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Issuer</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.issuer or 'Not configured' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Authorization Endpoint</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.authorization_endpoint or 'Not configured' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">JWKS URI</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ idp.jwks_uri or 'Not configured' }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Client Configuration -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mt-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Client Configuration</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Client ID</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.client_id }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Redirect URI</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.redirect_uri }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Scopes</dt>
+                    <dd class="mt-1">
+                        {% for scope in state.scopes %}
+                        <span class="inline-block bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs mr-1 mb-1">{{ scope }}</span>
+                        {% endfor %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+{% endblock %}

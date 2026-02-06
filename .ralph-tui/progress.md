@@ -34,6 +34,14 @@ after each iteration and it's included in prompts for context.
 - PyJWT library handles JWKS fetching via PyJWKClient and signature verification
 - Clock skew tolerance (default 120s) for time-based claim validation
 
+### OIDC Implicit Flow Pattern (Legacy)
+- ImplicitFlow class in `authtest/core/oidc/flows.py` - follows same pattern as other flows
+- Uses separate callback URL (`/oidc/implicit/callback`) that renders JS to extract tokens from fragment
+- URL fragments (#) are NOT sent to server - client-side JS must parse and POST to `/implicit/process`
+- response_type determines which tokens are returned: "token", "id_token", or "id_token token"
+- No client_secret needed (public client flow)
+- Security warnings are mandatory - this flow is deprecated per OAuth 2.0 Security BCP
+
 ---
 
 ### OIDC Discovery Pattern
@@ -257,5 +265,35 @@ after each iteration and it's included in prompts for context.
   - Access tokens may or may not be JWTs depending on IdP configuration
   - Flow is simpler than Authorization Code - no redirects, single POST request
   - Reused existing OIDCFlowState dataclass with grant_type field to distinguish flows
+---
+
+## 2026-02-05 - US-020
+- **What was implemented**: OIDC Implicit flow for testing legacy implementations
+- **Files created/modified**:
+  - `authtest/core/oidc/flows.py` - Added `ImplicitFlow` class with start_flow(), create_authorization_request(), process_fragment_response(), record_result(), get_flow_result() methods
+  - `authtest/core/oidc/__init__.py` - Exported ImplicitFlow class
+  - `authtest/web/routes/oidc.py` - Added `/implicit`, `/implicit/callback`, `/implicit/process`, `/implicit/cancel` routes
+  - `authtest/web/templates/oidc/implicit.html` (NEW) - Preflight checks and flow configuration UI with security warning
+  - `authtest/web/templates/oidc/implicit_callback.html` (NEW) - Client-side JavaScript to extract tokens from URL fragment
+  - `authtest/web/templates/oidc/implicit_result.html` (NEW) - Token display with decoded JWT, validation, and security warnings
+  - `authtest/web/templates/oidc/index.html` - Added Implicit flow button and description
+- **Features implemented**:
+  - Authorization request with response_type=token, id_token, or id_token token
+  - Tokens returned directly in URL fragment (no code exchange)
+  - Client-side JavaScript extracts tokens from fragment and POSTs to server
+  - Token decoding and signature validation
+  - Prominent security warnings about implicit flow deprecation
+  - Full test result recording to database
+- **Acceptance Criteria Met**:
+  - [x] Authorization request with response_type=token or id_token
+  - [x] Token returned in URL fragment
+  - [x] Warning about implicit flow security concerns
+- **Learnings:**
+  - Implicit flow returns tokens in URL fragment (#), not query string (?)
+  - URL fragments are never sent to server, so client-side JS must extract them
+  - response_type can be: "token" (access_token only), "id_token" (ID token only), or "id_token token" (both)
+  - No client_secret needed for implicit flow (public client)
+  - Security warnings are crucial - this flow is deprecated per OAuth 2.0 Security BCP
+  - Fragment parsing uses URLSearchParams after removing the leading #
 ---
 

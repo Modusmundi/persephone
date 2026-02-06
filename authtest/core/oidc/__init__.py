@@ -12,6 +12,7 @@ from authtest.core.oidc.client import (
 from authtest.core.oidc.flows import (
     AuthorizationCodeFlow,
     ClientCredentialsFlow,
+    ImplicitFlow,
     OIDCFlowResult,
     OIDCFlowState,
     OIDCFlowStatus,
@@ -47,6 +48,7 @@ __all__ = [
     # Flows
     "AuthorizationCodeFlow",
     "ClientCredentialsFlow",
+    "ImplicitFlow",
     "OIDCFlowResult",
     "OIDCFlowState",
     "OIDCFlowStatus",

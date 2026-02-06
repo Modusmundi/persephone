@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Processing Implicit Flow - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto text-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-8">
+        <div id="loading" class="py-8">
+            <svg class="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <h2 class="text-xl font-semibold mb-2">Processing Response</h2>
+            <p class="text-gray-600 dark:text-gray-400">Extracting tokens from URL fragment...</p>
+        </div>
+
+        <div id="error" class="py-8 hidden">
+            <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <h2 class="text-xl font-semibold text-red-600 dark:text-red-400 mb-2">Error</h2>
+            <p id="error-message" class="text-gray-600 dark:text-gray-400 mb-4"></p>
+            <a href="{{ url_for('oidc.index') }}" class="inline-block bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-2 px-4 rounded transition-colors">
+                Back to OIDC Tests
+            </a>
+        </div>
+
+        <!-- Hidden form to submit tokens to server -->
+        <form id="token-form" action="{{ url_for('oidc.implicit_process') }}" method="POST" class="hidden">
+            <input type="hidden" name="access_token" id="form-access_token">
+            <input type="hidden" name="id_token" id="form-id_token">
+            <input type="hidden" name="token_type" id="form-token_type">
+            <input type="hidden" name="expires_in" id="form-expires_in">
+            <input type="hidden" name="scope" id="form-scope">
+            <input type="hidden" name="state" id="form-state">
+            <input type="hidden" name="error" id="form-error">
+            <input type="hidden" name="error_description" id="form-error_description">
+        </form>
+    </div>
+
+    <!-- Security Note -->
+    <div class="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 rounded-lg text-left">
+        <div class="flex items-start">
+            <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="text-sm text-yellow-700 dark:text-yellow-300">
+                <p class="font-semibold">Security Note</p>
+                <p class="mt-1">
+                    The tokens were returned in the URL fragment (after #). This information is visible
+                    in your browser's address bar and may be logged in browser history. This demonstrates
+                    why the Implicit flow is considered insecure.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Parse the URL fragment and extract token parameters
+function parseFragment() {
+    const fragment = window.location.hash.substring(1);
+    if (!fragment) {
+        return null;
+    }
+
+    const params = new URLSearchParams(fragment);
+    return {
+        access_token: params.get('access_token'),
+        id_token: params.get('id_token'),
+        token_type: params.get('token_type'),
+        expires_in: params.get('expires_in'),
+        scope: params.get('scope'),
+        state: params.get('state'),
+        error: params.get('error'),
+        error_description: params.get('error_description')
+    };
+}
+
+function showError(message) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('error').classList.remove('hidden');
+    document.getElementById('error-message').textContent = message;
+}
+
+function submitTokens(data) {
+    // Populate form fields
+    document.getElementById('form-access_token').value = data.access_token || '';
+    document.getElementById('form-id_token').value = data.id_token || '';
+    document.getElementById('form-token_type').value = data.token_type || '';
+    document.getElementById('form-expires_in').value = data.expires_in || '';
+    document.getElementById('form-scope').value = data.scope || '';
+    document.getElementById('form-state').value = data.state || '';
+    document.getElementById('form-error').value = data.error || '';
+    document.getElementById('form-error_description').value = data.error_description || '';
+
+    // Submit the form
+    document.getElementById('token-form').submit();
+}
+
+// Main execution
+document.addEventListener('DOMContentLoaded', function() {
+    const data = parseFragment();
+
+    if (!data) {
+        showError('No tokens found in URL fragment. The IdP may not support the Implicit flow or there was an error.');
+        return;
+    }
+
+    // Check for error response from IdP
+    if (data.error) {
+        // Still submit to process the error properly
+        submitTokens(data);
+        return;
+    }
+
+    // Check if we got at least one token
+    if (!data.access_token && !data.id_token) {
+        showError('No tokens received in the response. Make sure the IdP is configured for the Implicit flow.');
+        return;
+    }
+
+    // Submit tokens to server
+    submitTokens(data);
+});
+</script>
+{% endblock %}
