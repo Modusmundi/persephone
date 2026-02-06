@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ idp.name }} - AuthTest{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{{ url_for('config.view_idp', name=idp.name) }}" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to {{ idp.display_name or idp.name }}
+    </a>
+</div>
+
+<h1 class="text-2xl font-bold mb-6">Edit SAML Identity Provider</h1>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="mb-6 space-y-2">
+    {% for category, message in messages %}
+    <div class="p-4 rounded-md {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% elif category == 'success' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% else %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<div class="max-w-3xl">
+    <form method="POST" class="space-y-6">
+        <!-- Basic Info -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Basic Information</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Name
+                    </label>
+                    <input type="text" value="{{ idp.name }}" disabled
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Name cannot be changed after creation
+                    </p>
+                </div>
+                <div>
+                    <label for="display_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Display Name
+                    </label>
+                    <input type="text" id="display_name" name="display_name" value="{{ idp.display_name or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="My Identity Provider">
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="enabled" name="enabled" {% if idp.enabled %}checked{% endif %}
+                        class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                    <label for="enabled" class="ml-2 block text-sm text-gray-900 dark:text-gray-100">
+                        Enabled
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- SAML Endpoints -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">SAML Endpoints</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="entity_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Entity ID <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="entity_id" name="entity_id" value="{{ idp.entity_id or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/metadata">
+                </div>
+                <div>
+                    <label for="sso_url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Single Sign-On URL <span class="text-red-500">*</span>
+                    </label>
+                    <input type="url" id="sso_url" name="sso_url" value="{{ idp.sso_url or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/saml/sso">
+                </div>
+                <div>
+                    <label for="slo_url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Single Logout URL
+                    </label>
+                    <input type="url" id="slo_url" name="slo_url" value="{{ idp.slo_url or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/saml/slo">
+                </div>
+                <div>
+                    <label for="metadata_url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Metadata URL
+                    </label>
+                    <input type="url" id="metadata_url" name="metadata_url" value="{{ idp.metadata_url or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/saml/metadata">
+                </div>
+            </div>
+        </div>
+
+        <!-- Certificate -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">IdP Certificate</h2>
+            <div>
+                <label for="x509_cert" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    X.509 Certificate (PEM format)
+                </label>
+                <textarea id="x509_cert" name="x509_cert" rows="8"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 font-mono text-sm"
+                    placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----">{{ idp.x509_cert or '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Import from Metadata -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Import from Metadata XML</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Paste SAML metadata XML below and click "Import" to update configuration.
+            </p>
+            <div>
+                <label for="metadata_xml" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Metadata XML
+                </label>
+                <textarea id="metadata_xml" name="metadata_xml" rows="10"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 font-mono text-sm"
+                    placeholder="<?xml version=&quot;1.0&quot;?>&#10;<EntityDescriptor..."></textarea>
+            </div>
+            <div class="mt-3">
+                <button type="submit" name="import_metadata" value="1" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors">
+                    Import from XML
+                </button>
+            </div>
+        </div>
+
+        <!-- Validation Messages -->
+        {% if validation %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Validation Results</h2>
+            {% if validation.errors %}
+            <div class="mb-4 p-4 bg-red-100 dark:bg-red-900 rounded-md">
+                <h3 class="font-semibold text-red-800 dark:text-red-200 mb-2">Errors</h3>
+                <ul class="list-disc list-inside text-sm text-red-700 dark:text-red-300">
+                    {% for error in validation.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if validation.warnings %}
+            <div class="p-4 bg-yellow-100 dark:bg-yellow-900 rounded-md">
+                <h3 class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Warnings</h3>
+                <ul class="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-300">
+                    {% for warning in validation.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Submit -->
+        <div class="flex justify-end space-x-4">
+            <a href="{{ url_for('config.view_idp', name=idp.name) }}" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancel
+            </a>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                Save Changes
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

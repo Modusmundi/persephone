@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Add OIDC Identity Provider - AuthTest{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <a href="{{ url_for('config.add_idp') }}" class="text-blue-600 dark:text-blue-400 hover:underline flex items-center">
+        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        Back to Protocol Selection
+    </a>
+</div>
+
+<h1 class="text-2xl font-bold mb-6">Add OpenID Connect Identity Provider</h1>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="mb-6 space-y-2">
+    {% for category, message in messages %}
+    <div class="p-4 rounded-md {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% elif category == 'success' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% else %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<div class="max-w-3xl">
+    <form method="POST" class="space-y-6">
+        <!-- Basic Info -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Basic Information</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Name <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="name" name="name" value="{{ name or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="my-idp" required pattern="[a-zA-Z0-9_-]+"
+                        title="Use only letters, numbers, hyphens, and underscores">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Unique identifier (letters, numbers, hyphens, underscores only)
+                    </p>
+                </div>
+                <div>
+                    <label for="display_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Display Name
+                    </label>
+                    <input type="text" id="display_name" name="display_name" value="{{ display_name or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="My Identity Provider">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Human-readable name (defaults to Name if not provided)
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- OIDC Discovery -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">OIDC Discovery</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Enter the Issuer URL and click "Discover" to automatically populate endpoints from the <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">.well-known/openid-configuration</code> endpoint.
+            </p>
+            <div class="flex space-x-2">
+                <div class="flex-grow">
+                    <label for="issuer" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Issuer URL <span class="text-red-500">*</span>
+                    </label>
+                    <input type="url" id="issuer" name="issuer" value="{{ issuer or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com">
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" name="discover" value="1" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors">
+                        Discover
+                    </button>
+                </div>
+            </div>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                The OIDC issuer identifier (e.g., https://accounts.google.com)
+            </p>
+        </div>
+
+        <!-- OIDC Endpoints -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">OAuth 2.0 / OIDC Endpoints</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                These endpoints can be auto-discovered or manually entered.
+            </p>
+            <div class="space-y-4">
+                <div>
+                    <label for="authorization_endpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Authorization Endpoint
+                    </label>
+                    <input type="url" id="authorization_endpoint" name="authorization_endpoint" value="{{ authorization_endpoint or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/oauth2/authorize">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        URL for initiating authorization requests
+                    </p>
+                </div>
+                <div>
+                    <label for="token_endpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Token Endpoint
+                    </label>
+                    <input type="url" id="token_endpoint" name="token_endpoint" value="{{ token_endpoint or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/oauth2/token">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        URL for exchanging authorization codes for tokens
+                    </p>
+                </div>
+                <div>
+                    <label for="userinfo_endpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        UserInfo Endpoint
+                    </label>
+                    <input type="url" id="userinfo_endpoint" name="userinfo_endpoint" value="{{ userinfo_endpoint or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/oauth2/userinfo">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        URL for retrieving user claims (optional)
+                    </p>
+                </div>
+                <div>
+                    <label for="jwks_uri" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        JWKS URI
+                    </label>
+                    <input type="url" id="jwks_uri" name="jwks_uri" value="{{ jwks_uri or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700"
+                        placeholder="https://idp.example.com/.well-known/jwks.json">
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        URL for retrieving JSON Web Key Set (for token signature validation)
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validation Messages -->
+        {% if validation %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Validation Results</h2>
+            {% if validation.errors %}
+            <div class="mb-4 p-4 bg-red-100 dark:bg-red-900 rounded-md">
+                <h3 class="font-semibold text-red-800 dark:text-red-200 mb-2">Errors</h3>
+                <ul class="list-disc list-inside text-sm text-red-700 dark:text-red-300">
+                    {% for error in validation.errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if validation.warnings %}
+            <div class="p-4 bg-yellow-100 dark:bg-yellow-900 rounded-md">
+                <h3 class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Warnings</h3>
+                <ul class="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-300">
+                    {% for warning in validation.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Submit -->
+        <div class="flex justify-end space-x-4">
+            <a href="{{ url_for('config.index') }}" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                Cancel
+            </a>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                Create Identity Provider
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

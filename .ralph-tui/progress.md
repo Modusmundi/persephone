@@ -50,6 +50,16 @@ after each iteration and it's included in prompts for context.
 - Bulk operations: export to JSON/CSV, delete with filters
 - API endpoint `/history/api/results` for dynamic JavaScript updates
 
+### Custom IdP Configuration Pattern
+- Config web routes in `authtest/web/routes/config.py` with config_bp blueprint
+- ValidationResult dataclass with valid, errors, warnings for configuration validation
+- validate_saml_config() and validate_oidc_config() functions check required fields and URL format
+- Flash messages with categories (error/success) for user feedback
+- Multiple submit buttons using name attribute (e.g., "discover" vs regular submit)
+- SAML metadata XML import via parse_saml_metadata() from discovery module
+- OIDC discovery via fetch_oidc_discovery() from discovery module
+- WerkzeugResponse type needed for redirect() return values in Flask route type hints
+
 ---
 
 ### OIDC Discovery Pattern
@@ -438,5 +448,42 @@ after each iteration and it's included in prompts for context.
   - SQLAlchemy's `delete(synchronize_session="fetch")` is needed when using filters with joins
   - Pagination in templates requires passing filter params via url_for() to preserve state
   - History link was already in sidebar (base.html) - just needed route implementation
+---
+
+## 2026-02-05 - US-034
+- **What was implemented**: Custom IdP manual configuration with web UI
+- **Files created**:
+  - `authtest/web/routes/config.py` - Config blueprint with routes for IdP management (list, add, view, edit, delete, toggle, fetch metadata)
+  - `authtest/web/templates/config/index.html` - IdP list with status indicators and actions
+  - `authtest/web/templates/config/add.html` - Protocol type selection (SAML vs OIDC)
+  - `authtest/web/templates/config/add_saml.html` - Manual SAML configuration form with metadata XML import
+  - `authtest/web/templates/config/add_oidc.html` - Manual OIDC configuration form with discovery
+  - `authtest/web/templates/config/view.html` - IdP detail view with quick actions
+  - `authtest/web/templates/config/edit_saml.html` - Edit SAML IdP configuration
+  - `authtest/web/templates/config/edit_oidc.html` - Edit OIDC IdP configuration
+- **Files modified**:
+  - `authtest/web/routes/__init__.py` - Registered config_bp blueprint
+- **Features implemented**:
+  - Manual entry of all SAML endpoints (Entity ID, SSO URL, SLO URL, metadata URL)
+  - Manual entry of all OIDC endpoints (Issuer, authorization, token, userinfo, JWKS)
+  - X.509 certificate entry in PEM format for SAML
+  - SAML metadata XML import with automatic field population
+  - OIDC discovery from issuer URL (.well-known/openid-configuration)
+  - Configuration validation with errors and warnings
+  - Validation checks: required fields, URL format, HTTPS security
+  - IdP enable/disable toggle
+  - Refresh configuration from metadata URL / OIDC discovery
+  - AJAX validation endpoint for real-time validation
+- **Acceptance Criteria Met**:
+  - [x] Manual entry of all SAML endpoints and certificates
+  - [x] Manual entry of all OIDC endpoints
+  - [x] SAML metadata XML import
+  - [x] Validation of entered configuration
+- **Learnings:**
+  - WerkzeugResponse type needed for Flask redirect() return values in type hints
+  - Variable name shadowing between branches needs separate names for mypy (e.g., saml_result vs oidc_result)
+  - Flask flash messages with categories enable styled error/success/info messages
+  - Form POST with name attribute can handle multiple submit buttons (e.g., "discover" vs main submit)
+  - ValidationResult dataclass simplifies passing errors and warnings between validation and template
 ---
 

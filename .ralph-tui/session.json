@@ -3,10 +3,10 @@
   "sessionId": "25d82f5e-e3a0-4aea-88db-13c8150ce3e5",
   "status": "running",
   "startedAt": "2026-02-06T01:00:16.143Z",
-  "updatedAt": "2026-02-06T02:47:23.293Z",
-  "currentIteration": 12,
+  "updatedAt": "2026-02-06T03:31:46.946Z",
+  "currentIteration": 13,
   "maxIterations": 10,
-  "tasksCompleted": 12,
+  "tasksCompleted": 13,
   "isPaused": false,
   "agentPlugin": "claude",
   "trackerState": {
@@ -134,6 +134,16 @@
       "durationMs": 660419,
       "startedAt": "2026-02-06T02:29:10.215Z",
       "endedAt": "2026-02-06T02:40:10.634Z"
+    },
+    {
+      "iteration": 13,
+      "status": "completed",
+      "taskId": "US-033",
+      "taskTitle": "Test history management",
+      "taskCompleted": true,
+      "durationMs": 412309,
+      "startedAt": "2026-02-06T02:40:30.980Z",
+      "endedAt": "2026-02-06T02:47:23.289Z"
     }
   ],
   "skippedTaskIds": [],
