@@ -36,6 +36,26 @@
                 </div>
             </div>
 
+            <!-- Token Inclusion -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium mb-2">Token Data</label>
+                <div class="flex flex-col space-y-2">
+                    <label class="flex items-center">
+                        <input type="radio" name="include_tokens" value="true" checked class="mr-2">
+                        <span>Include raw tokens</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(full technical detail)</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="include_tokens" value="false" class="mr-2">
+                        <span>Exclude raw tokens</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 ml-1">(safer for sharing)</span>
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Excluding tokens replaces access_token, id_token, and refresh_token values with [REDACTED].
+                </p>
+            </div>
+
             <hr class="my-6 border-gray-200 dark:border-gray-700">
 
             <h2 class="text-lg font-medium mb-4">Filter Results (Optional)</h2>

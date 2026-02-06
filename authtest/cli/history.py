@@ -336,6 +336,35 @@ def history_show(test_id: int, output_json: bool) -> None:
         error_result(f"Database not initialized: {e}\nRun 'authtest config init' first.", output_json)
 
 
+def _redact_tokens_from_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Redact sensitive token values from export data.
+
+    Args:
+        data: The result data dictionary to redact
+
+    Returns:
+        A copy of the data with tokens redacted
+    """
+    import copy
+    redacted = copy.deepcopy(data)
+
+    # Redact from response_data.tokens
+    if redacted.get("response_data") and isinstance(redacted["response_data"], dict):
+        tokens = redacted["response_data"].get("tokens")
+        if tokens and isinstance(tokens, dict):
+            for key in ["access_token", "id_token", "refresh_token"]:
+                if key in tokens and tokens[key]:
+                    tokens[key] = "[REDACTED]"
+
+    # Redact from request_data (e.g., client_secret if present)
+    if redacted.get("request_data") and isinstance(redacted["request_data"], dict):
+        for key in ["client_secret", "code_verifier"]:
+            if key in redacted["request_data"]:
+                redacted["request_data"][key] = "[REDACTED]"
+
+    return redacted
+
+
 @history.command("export")
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--idp", "idp_name", help="Filter by IdP name")
@@ -370,6 +399,12 @@ def history_show(test_id: int, output_json: bool) -> None:
     default="json",
     help="Export format (default: json)",
 )
+@click.option(
+    "--include-tokens/--exclude-tokens",
+    "include_tokens",
+    default=True,
+    help="Include or exclude raw token values in export (default: include)",
+)
 @json_option
 def history_export(
     output_path: Path,
@@ -380,6 +415,7 @@ def history_export(
     until: str | None,
     ids: str | None,
     export_format: str,
+    include_tokens: bool,
     output_json: bool,
 ) -> None:
     """Export test results to a file.
@@ -402,6 +438,9 @@ def history_export(
 
         # Export with filters
         authtest history export report.json --idp my-okta --since 7d
+
+        # Export without raw tokens (for sharing)
+        authtest history export report.json --exclude-tokens
     """
     from authtest.storage import Database, IdPProvider, KeyNotFoundError, TestResult
 
@@ -467,7 +506,7 @@ def history_export(
         export_data = []
         for result in results:
             idp_display = result.idp_provider.name if result.idp_provider else None
-            export_data.append({
+            result_dict: dict[str, Any] = {
                 "id": result.id,
                 "test_name": result.test_name,
                 "test_type": result.test_type,
@@ -480,7 +519,11 @@ def history_export(
                 "error_details": result.error_details,
                 "request_data": result.request_data,
                 "response_data": result.response_data,
-            })
+            }
+            # Redact tokens if requested
+            if not include_tokens:
+                result_dict = _redact_tokens_from_data(result_dict)
+            export_data.append(result_dict)
 
         session.close()
         database.close()

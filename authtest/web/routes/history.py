@@ -25,6 +25,35 @@ if TYPE_CHECKING:
 from authtest.storage.database import get_database
 from authtest.storage.models import IdPProvider, TestResult
 
+
+def _redact_tokens_from_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Redact sensitive token values from export data.
+
+    Args:
+        data: The result data dictionary to redact
+
+    Returns:
+        A copy of the data with tokens redacted
+    """
+    import copy
+    redacted = copy.deepcopy(data)
+
+    # Redact from response_data.tokens
+    if redacted.get("response_data") and isinstance(redacted["response_data"], dict):
+        tokens = redacted["response_data"].get("tokens")
+        if tokens and isinstance(tokens, dict):
+            for key in ["access_token", "id_token", "refresh_token"]:
+                if key in tokens and tokens[key]:
+                    tokens[key] = "[REDACTED]"
+
+    # Redact from request_data (e.g., client_secret if present)
+    if redacted.get("request_data") and isinstance(redacted["request_data"], dict):
+        for key in ["client_secret", "code_verifier"]:
+            if key in redacted["request_data"]:
+                redacted["request_data"][key] = "[REDACTED]"
+
+    return redacted
+
 # Get the directories relative to this package
 _web_dir = Path(__file__).parent.parent
 _templates_dir = _web_dir / "templates"
@@ -215,6 +244,7 @@ def export() -> str | Response | WerkzeugResponse:
         until = request.form.get("until", "")
         export_format = request.form.get("format", "json")
         selected_ids = request.form.get("selected_ids", "")
+        include_tokens = request.form.get("include_tokens", "true") == "true"
 
         # Parse date filters
         since_dt = _parse_date_or_duration(since) if since else None
@@ -255,7 +285,7 @@ def export() -> str | Response | WerkzeugResponse:
         # Format data
         export_data = []
         for r in results:
-            export_data.append({
+            result_dict: dict[str, Any] = {
                 "id": r.id,
                 "test_name": r.test_name,
                 "test_type": r.test_type,
@@ -268,7 +298,11 @@ def export() -> str | Response | WerkzeugResponse:
                 "error_details": r.error_details,
                 "request_data": r.request_data,
                 "response_data": r.response_data,
-            })
+            }
+            # Redact tokens if requested
+            if not include_tokens:
+                result_dict = _redact_tokens_from_data(result_dict)
+            export_data.append(result_dict)
 
         # Generate response based on format
         timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")

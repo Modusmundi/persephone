@@ -487,3 +487,28 @@ after each iteration and it's included in prompts for context.
   - ValidationResult dataclass simplifies passing errors and warnings between validation and template
 ---
 
+## 2026-02-05 - US-035
+- **What was implemented**: JSON export for test results with token inclusion/exclusion option
+- **Files modified**:
+  - `authtest/cli/history.py` - Added `_redact_tokens_from_data()` function and `--include-tokens/--exclude-tokens` flag to export command
+  - `authtest/web/routes/history.py` - Added `_redact_tokens_from_data()` function and `include_tokens` form field handling
+  - `authtest/web/templates/history/export.html` - Added radio buttons for token inclusion option
+  - `authtest/web/templates/history/show.html` - Updated single result export with two buttons (with/without tokens)
+- **Features verified/implemented**:
+  - [x] Full technical detail in JSON format (pre-existing)
+  - [x] Consistent schema across all flow types (pre-existing)
+  - [x] Option to include or exclude raw tokens (NEW)
+  - [x] CLI and web UI export options (pre-existing)
+- **Acceptance Criteria Met**:
+  - [x] Full technical detail in JSON format - includes all request_data, response_data, tokens, claims, validation checks
+  - [x] Consistent schema across all flow types - uses TestResult model fields uniformly for SAML and OIDC
+  - [x] Option to include or exclude raw tokens - `--exclude-tokens` flag for CLI, radio buttons for web UI
+  - [x] CLI and web UI export options - `authtest history export` command and `/history/export` web route
+- **Learnings:**
+  - Most of US-035 was already implemented in US-033 (Test History Management)
+  - Token redaction uses copy.deepcopy() to avoid mutating original data
+  - Radio buttons with name="include_tokens" value="true/false" used instead of checkbox for clearer semantics
+  - Redaction covers access_token, id_token, refresh_token in response_data.tokens
+  - Also redacts client_secret and code_verifier from request_data for completeness
+---
+
