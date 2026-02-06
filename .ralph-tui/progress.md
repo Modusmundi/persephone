@@ -62,6 +62,16 @@ after each iteration and it's included in prompts for context.
 - Web routes support both HTTP-Redirect and HTTP-POST bindings
 - SP metadata includes SingleLogoutService endpoints for IdP configuration
 
+### Protocol Logging Pattern
+- Logging module in `authtest/core/logging.py` with ProtocolLogger, HTTPExchange, ProtocolLog classes
+- LoggingClient wraps httpx.Client to capture all HTTP traffic automatically
+- Log levels: ERROR, INFO (default), DEBUG, TRACE (requires explicit trace_enabled flag)
+- Sensitive data (tokens, secrets, cookies) auto-redacted at all levels except TRACE
+- Flows start logging with `protocol_logger.start_flow()` and end with `end_flow()`
+- HTTPExchange captures method, url, headers, body, status, duration, redirects
+- ProtocolLog attached to flow state and included in test results for debugging
+- Config via LoggingSettings (level, trace_enabled, log_file) in config.yaml or env vars
+
 ---
 
 ## 2026-02-05 - US-011
@@ -295,5 +305,38 @@ after each iteration and it's included in prompts for context.
   - No client_secret needed for implicit flow (public client)
   - Security warnings are crucial - this flow is deprecated per OAuth 2.0 Security BCP
   - Fragment parsing uses URLSearchParams after removing the leading #
+---
+
+## 2026-02-05 - US-021
+- **What was implemented**: Full protocol logging for authentication flows with configurable log levels
+- **Files created**:
+  - `authtest/core/logging.py` (NEW) - ProtocolLogger, HTTPExchange, ProtocolLog, LoggingClient, LoggingTransport classes; redact_sensitive() function; configure_logging() for setup
+  - `tests/test_protocol_logging.py` (NEW) - Unit tests for logging module
+- **Files modified**:
+  - `authtest/core/config.py` - Added LoggingSettings dataclass with level, trace_enabled, log_file; updated AppConfig, load_config(), get_default_config_yaml()
+  - `authtest/core/__init__.py` - Added logging exports
+  - `authtest/core/oidc/client.py` - OIDCClient now uses LoggingClient for HTTP requests; accepts optional protocol_logger
+  - `authtest/core/oidc/flows.py` - AuthorizationCodeFlow, ClientCredentialsFlow, ImplicitFlow now accept protocol_logger; OIDCFlowState has protocol_log field; flows start/end protocol logging and include logs in results
+  - `authtest/idp_presets/discovery.py` - fetch_saml_metadata() and fetch_oidc_discovery() use LoggingClient
+  - `authtest/cli/serve.py` - Added --log-level and --trace options; initializes protocol logging from config
+- **Features implemented**:
+  - Full request/response logging for all HTTP exchanges
+  - Raw HTTP traffic capture (headers, redirects, cookies, POST bodies)
+  - Configurable log levels: ERROR, INFO, DEBUG, TRACE
+  - TRACE level requires explicit enable (trace_enabled: true) for sensitive data
+  - Automatic redaction of sensitive data (client_secret, tokens, Authorization headers, cookies)
+  - Protocol logs attached to test results for debugging
+  - Environment variable support: AUTHTEST_LOG_LEVEL, AUTHTEST_TRACE_ENABLED, AUTHTEST_LOG_FILE
+- **Acceptance Criteria Met**:
+  - [x] Full request/response logging for all exchanges
+  - [x] Raw HTTP traffic capture (headers, redirects, cookies, POST bodies)
+  - [x] Configurable log levels (ERROR, INFO, DEBUG, TRACE)
+  - [x] TRACE level requires explicit enable for sensitive data
+- **Learnings:**
+  - httpx Client doesn't easily support transport-level hooks, so created LoggingClient wrapper that logs before/after requests
+  - Sensitive data redaction uses regex patterns for URL params, headers, JSON fields, cookies
+  - Header dict values don't include key prefix, so need separate patterns for "Bearer token" vs "Authorization: Bearer token"
+  - ProtocolLog stores exchanges with start/complete timestamps; attached to flow state for result recording
+  - IntEnum used for LogLevel to allow numeric comparisons (TRACE < DEBUG < INFO < ERROR)
 ---
 

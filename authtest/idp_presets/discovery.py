@@ -13,6 +13,8 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
+from authtest.core.logging import LoggingClient, get_protocol_logger
+
 logger = logging.getLogger(__name__)
 
 # SAML namespace mappings
@@ -76,12 +78,15 @@ def fetch_saml_metadata(
     """
     try:
         logger.debug(f"Fetching SAML metadata from {metadata_url}")
+        protocol_logger = get_protocol_logger()
+        protocol_logger.start_flow(f"saml_metadata_{id(metadata_url)}", "saml_metadata_fetch")
 
-        with httpx.Client(timeout=timeout, verify=verify_ssl) as client:
+        with LoggingClient(protocol_logger=protocol_logger, timeout=timeout, verify=verify_ssl) as client:
             response = client.get(metadata_url)
             response.raise_for_status()
             metadata_xml = response.text
 
+        protocol_logger.end_flow()
         return parse_saml_metadata(metadata_xml)
 
     except httpx.TimeoutException:
@@ -240,12 +245,15 @@ def fetch_oidc_discovery(
 
     try:
         logger.debug(f"Fetching OIDC discovery from {discovery_url}")
+        protocol_logger = get_protocol_logger()
+        protocol_logger.start_flow(f"oidc_discovery_{id(discovery_url)}", "oidc_discovery_fetch")
 
-        with httpx.Client(timeout=timeout, verify=verify_ssl) as client:
+        with LoggingClient(protocol_logger=protocol_logger, timeout=timeout, verify=verify_ssl) as client:
             response = client.get(discovery_url)
             response.raise_for_status()
             config = response.json()
 
+        protocol_logger.end_flow()
         return OIDCDiscoveryResult(
             success=True,
             issuer=config.get("issuer"),

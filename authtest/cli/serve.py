@@ -39,6 +39,17 @@ import click
     is_flag=True,
     help="Enable debug mode",
 )
+@click.option(
+    "--log-level",
+    type=click.Choice(["ERROR", "INFO", "DEBUG", "TRACE"], case_sensitive=False),
+    default=None,
+    help="Protocol log level (default: from config or INFO)",
+)
+@click.option(
+    "--trace",
+    is_flag=True,
+    help="Enable TRACE logging (includes sensitive data - use with caution)",
+)
 def serve(
     host: str | None,
     port: int | None,
@@ -46,6 +57,8 @@ def serve(
     cert: Path | None,
     key: Path | None,
     debug: bool,
+    log_level: str | None,
+    trace: bool,
 ) -> None:
     """Start the AuthTest web server.
 
@@ -66,12 +79,32 @@ def serve(
 
         # Disable TLS (not recommended)
         authtest serve --no-tls
+
+        # Enable debug logging
+        authtest serve --log-level DEBUG
+
+        # Enable TRACE logging (includes sensitive data)
+        authtest serve --log-level TRACE --trace
     """
     from authtest.app import run_server
     from authtest.core.config import load_config
+    from authtest.core.logging import configure_logging
 
     # Load config
     config = load_config()
+
+    # Apply logging CLI overrides
+    if log_level:
+        config.logging.level = log_level.upper()
+    if trace:
+        config.logging.trace_enabled = True
+
+    # Configure protocol logging
+    configure_logging(
+        level=config.logging.level,
+        trace_enabled=config.logging.trace_enabled,
+        log_file=config.logging.log_file,
+    )
 
     # Apply CLI overrides
     if no_tls:

@@ -15,6 +15,8 @@ from urllib.parse import urlencode
 
 import httpx
 
+from authtest.core.logging import LoggingClient, ProtocolLogger, get_protocol_logger
+
 
 def generate_code_verifier(length: int = 64) -> str:
     """Generate a PKCE code verifier.
@@ -194,24 +196,36 @@ class OIDCClient:
     Supports the Authorization Code flow for testing OIDC implementations.
     """
 
-    def __init__(self, config: OIDCClientConfig) -> None:
+    def __init__(
+        self,
+        config: OIDCClientConfig,
+        protocol_logger: ProtocolLogger | None = None,
+    ) -> None:
         """Initialize the OIDC client.
 
         Args:
             config: Client configuration with endpoints and credentials.
+            protocol_logger: Optional protocol logger for HTTP traffic capture.
         """
         self.config = config
-        self._http_client: httpx.Client | None = None
+        self._protocol_logger = protocol_logger or get_protocol_logger()
+        self._http_client: LoggingClient | None = None
 
     @property
-    def http_client(self) -> httpx.Client:
-        """Get or create HTTP client."""
+    def http_client(self) -> LoggingClient:
+        """Get or create HTTP client with logging."""
         if self._http_client is None:
-            self._http_client = httpx.Client(
+            self._http_client = LoggingClient(
+                protocol_logger=self._protocol_logger,
                 timeout=30.0,
                 verify=False,  # For testing with self-signed certs
             )
         return self._http_client
+
+    @property
+    def protocol_logger(self) -> ProtocolLogger:
+        """Get the protocol logger."""
+        return self._protocol_logger
 
     def close(self) -> None:
         """Close the HTTP client."""

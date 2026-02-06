@@ -22,6 +22,32 @@ ENV_PREFIX = "AUTHTEST_"
 
 
 @dataclass
+class LoggingSettings:
+    """Protocol logging configuration settings."""
+
+    level: str = "INFO"  # ERROR, INFO, DEBUG, TRACE
+    trace_enabled: bool = False  # Must be explicitly enabled for sensitive data
+    log_file: str | None = None  # Optional file path for protocol logs
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LoggingSettings:
+        """Create LoggingSettings from a dictionary."""
+        return cls(
+            level=data.get("level", "INFO"),
+            trace_enabled=data.get("trace_enabled", False),
+            log_file=data.get("log_file"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "level": self.level,
+            "trace_enabled": self.trace_enabled,
+            "log_file": self.log_file,
+        }
+
+
+@dataclass
 class TLSSettings:
     """TLS/HTTPS configuration settings."""
 
@@ -115,6 +141,7 @@ class AppConfig:
 
     server: ServerSettings = field(default_factory=ServerSettings)
     auth: AuthSettings = field(default_factory=AuthSettings)
+    logging: LoggingSettings = field(default_factory=LoggingSettings)
     config_path: Path | None = None
 
     @classmethod
@@ -122,9 +149,11 @@ class AppConfig:
         """Create AppConfig from a dictionary."""
         server_data = data.get("server", {})
         auth_data = data.get("auth", {})
+        logging_data = data.get("logging", {})
         return cls(
             server=ServerSettings.from_dict(server_data) if server_data else ServerSettings(),
             auth=AuthSettings.from_dict(auth_data) if auth_data else AuthSettings(),
+            logging=LoggingSettings.from_dict(logging_data) if logging_data else LoggingSettings(),
             config_path=config_path,
         )
 
@@ -133,6 +162,7 @@ class AppConfig:
         return {
             "server": self.server.to_dict(),
             "auth": self.auth.to_dict(),
+            "logging": self.logging.to_dict(),
         }
 
     def save(self, path: Path | None = None) -> None:
@@ -233,6 +263,18 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             f"{ENV_PREFIX}SESSION_TIMEOUT", auth.session_timeout_minutes
         )
 
+    # Logging settings
+    logging_settings = config.logging
+    if os.environ.get(f"{ENV_PREFIX}LOG_LEVEL"):
+        logging_settings.level = os.environ[f"{ENV_PREFIX}LOG_LEVEL"]
+
+    logging_settings.trace_enabled = _get_env_bool(
+        f"{ENV_PREFIX}TRACE_ENABLED", logging_settings.trace_enabled
+    )
+
+    if os.environ.get(f"{ENV_PREFIX}LOG_FILE"):
+        logging_settings.log_file = os.environ[f"{ENV_PREFIX}LOG_FILE"]
+
     return config
 
 
@@ -285,4 +327,21 @@ auth:
   # Session timeout in minutes
   # After this time of inactivity, users must log in again
   session_timeout_minutes: 60
+
+# Protocol logging settings
+logging:
+  # Log level: ERROR, INFO, DEBUG, TRACE
+  # - ERROR: Only log errors
+  # - INFO: Log flow milestones (requests initiated, responses received)
+  # - DEBUG: Log HTTP details (headers, status codes, timing)
+  # - TRACE: Log full request/response bodies (requires trace_enabled: true)
+  level: "INFO"
+
+  # Enable TRACE level logging for sensitive data (tokens, secrets)
+  # WARNING: Setting this to true will log sensitive authentication data!
+  # Only enable for debugging in secure environments
+  trace_enabled: false
+
+  # Optional file path to write protocol logs
+  # log_file: ~/.authtest/protocol.log
 """

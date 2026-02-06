@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from authtest.core.logging import ProtocolLog, ProtocolLogger, get_protocol_logger
 from authtest.core.oidc.client import (
     AuthorizationRequest,
     OIDCClient,
@@ -120,6 +121,9 @@ class OIDCFlowState:
 
     # Options
     options: dict[str, Any] = field(default_factory=dict)
+
+    # Protocol logging (not serialized to session, used for results)
+    protocol_log: ProtocolLog | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for session storage."""
@@ -378,6 +382,7 @@ class AuthorizationCodeFlow:
         client_secret: str | None = None,
         base_url: str = "https://localhost:8443",
         scopes: list[str] | None = None,
+        protocol_logger: ProtocolLogger | None = None,
     ) -> None:
         """Initialize the flow handler.
 
@@ -388,6 +393,7 @@ class AuthorizationCodeFlow:
             client_secret: OAuth2 client secret (optional for public clients).
             base_url: Base URL of this application.
             scopes: Scopes to request (defaults to IdP defaults).
+            protocol_logger: Optional protocol logger for HTTP traffic capture.
         """
         self.idp = idp
         self.db = db
@@ -395,6 +401,7 @@ class AuthorizationCodeFlow:
         self.client_id = client_id
         self.client_secret = client_secret
         self.scopes = scopes
+        self.protocol_logger = protocol_logger or get_protocol_logger()
 
         # Build redirect URI
         self.redirect_uri = f"{self.base_url}/oidc/callback"
@@ -407,7 +414,7 @@ class AuthorizationCodeFlow:
             redirect_uri=self.redirect_uri,
             scopes=scopes,
         )
-        self.client = OIDCClient(self.client_config)
+        self.client = OIDCClient(self.client_config, protocol_logger=self.protocol_logger)
 
     def start_flow(
         self,
@@ -424,6 +431,9 @@ class AuthorizationCodeFlow:
             OIDCFlowState with preflight results.
         """
         flow_id = f"oidc_flow_{secrets.token_hex(16)}"
+
+        # Start protocol logging for this flow
+        protocol_log = self.protocol_logger.start_flow(flow_id, "oidc_authorization_code")
 
         # Run pre-flight checks
         preflight = self._run_preflight_checks()
@@ -443,6 +453,7 @@ class AuthorizationCodeFlow:
                 "prompt": prompt,
                 "login_hint": login_hint,
             },
+            protocol_log=protocol_log,
         )
 
         return state
@@ -655,6 +666,10 @@ class AuthorizationCodeFlow:
             state.userinfo_response = userinfo
 
         state.status = OIDCFlowStatus.COMPLETED
+
+        # End protocol logging
+        state.protocol_log = self.protocol_logger.end_flow()
+
         return state
 
     def record_result(self, state: OIDCFlowState) -> int:
@@ -714,6 +729,10 @@ class AuthorizationCodeFlow:
             response_data["access_token_validation"] = state.access_token_validation.to_dict()
         if state.userinfo_response:
             response_data["userinfo"] = _userinfo_to_dict(state.userinfo_response)
+
+        # Include protocol log (without sensitive data)
+        if state.protocol_log:
+            response_data["protocol_log"] = state.protocol_log.to_dict(include_sensitive=False)
 
         # Determine test name based on PKCE usage
         test_name = "Authorization Code Flow"
@@ -819,6 +838,7 @@ class ImplicitFlow:
         client_id: str,
         base_url: str = "https://localhost:8443",
         scopes: list[str] | None = None,
+        protocol_logger: ProtocolLogger | None = None,
     ) -> None:
         """Initialize the flow handler.
 
@@ -828,12 +848,14 @@ class ImplicitFlow:
             client_id: OAuth2 client ID.
             base_url: Base URL of this application.
             scopes: Scopes to request (defaults to IdP defaults).
+            protocol_logger: Optional protocol logger for HTTP traffic capture.
         """
         self.idp = idp
         self.db = db
         self.base_url = base_url.rstrip("/")
         self.client_id = client_id
         self.scopes = scopes
+        self.protocol_logger = protocol_logger or get_protocol_logger()
 
         # Build redirect URI - uses a special callback for implicit flow
         self.redirect_uri = f"{self.base_url}/oidc/implicit/callback"
@@ -845,7 +867,7 @@ class ImplicitFlow:
             redirect_uri=self.redirect_uri,
             scopes=scopes,
         )
-        self.client = OIDCClient(self.client_config)
+        self.client = OIDCClient(self.client_config, protocol_logger=self.protocol_logger)
 
     def start_flow(
         self,
@@ -864,6 +886,9 @@ class ImplicitFlow:
             OIDCFlowState with preflight results.
         """
         flow_id = f"oidc_implicit_flow_{secrets.token_hex(16)}"
+
+        # Start protocol logging for this flow
+        protocol_log = self.protocol_logger.start_flow(flow_id, "oidc_implicit")
 
         # Run pre-flight checks
         preflight = self._run_preflight_checks()
@@ -884,6 +909,7 @@ class ImplicitFlow:
                 "prompt": prompt,
                 "login_hint": login_hint,
             },
+            protocol_log=protocol_log,
         )
 
         return state
@@ -1104,6 +1130,10 @@ class ImplicitFlow:
                 )
 
         state.status = OIDCFlowStatus.COMPLETED
+
+        # End protocol logging
+        state.protocol_log = self.protocol_logger.end_flow()
+
         return state
 
     def record_result(self, state: OIDCFlowState) -> int:
@@ -1155,6 +1185,10 @@ class ImplicitFlow:
             response_data["id_token_validation"] = state.id_token_validation.to_dict()
         if state.access_token_validation:
             response_data["access_token_validation"] = state.access_token_validation.to_dict()
+
+        # Include protocol log (without sensitive data)
+        if state.protocol_log:
+            response_data["protocol_log"] = state.protocol_log.to_dict(include_sensitive=False)
 
         # Determine test name based on response_type
         response_type = state.options.get("response_type", "id_token token")
@@ -1243,6 +1277,7 @@ class ClientCredentialsFlow:
         client_id: str,
         client_secret: str,
         scopes: list[str] | None = None,
+        protocol_logger: ProtocolLogger | None = None,
     ) -> None:
         """Initialize the flow handler.
 
@@ -1252,12 +1287,14 @@ class ClientCredentialsFlow:
             client_id: OAuth2 client ID.
             client_secret: OAuth2 client secret (required for this flow).
             scopes: Scopes to request (defaults to IdP defaults minus 'openid').
+            protocol_logger: Optional protocol logger for HTTP traffic capture.
         """
         self.idp = idp
         self.db = db
         self.client_id = client_id
         self.client_secret = client_secret
         self.scopes = scopes
+        self.protocol_logger = protocol_logger or get_protocol_logger()
 
         # Create client config
         self.client_config = OIDCClientConfig.from_idp(
@@ -1266,7 +1303,7 @@ class ClientCredentialsFlow:
             client_secret=client_secret,
             scopes=scopes,
         )
-        self.client = OIDCClient(self.client_config)
+        self.client = OIDCClient(self.client_config, protocol_logger=self.protocol_logger)
 
     def start_flow(self) -> OIDCFlowState:
         """Start a new Client Credentials flow.
@@ -1275,6 +1312,9 @@ class ClientCredentialsFlow:
             OIDCFlowState with preflight results.
         """
         flow_id = f"oidc_cc_flow_{secrets.token_hex(16)}"
+
+        # Start protocol logging for this flow
+        protocol_log = self.protocol_logger.start_flow(flow_id, "oidc_client_credentials")
 
         # Run pre-flight checks
         preflight = self._run_preflight_checks()
@@ -1289,6 +1329,7 @@ class ClientCredentialsFlow:
             scopes=self.scopes or [s for s in self.client_config.scopes if s != "openid"],
             started_at=datetime.now(UTC),
             preflight=preflight,
+            protocol_log=protocol_log,
         )
 
         return state
@@ -1393,6 +1434,10 @@ class ClientCredentialsFlow:
                 )
 
         state.status = OIDCFlowStatus.COMPLETED
+
+        # End protocol logging
+        state.protocol_log = self.protocol_logger.end_flow()
+
         return state
 
     def record_result(self, state: OIDCFlowState) -> int:
@@ -1435,6 +1480,10 @@ class ClientCredentialsFlow:
             response_data["access_token_decoded"] = _decoded_token_to_dict(state.access_token_decoded)
         if state.access_token_validation:
             response_data["access_token_validation"] = state.access_token_validation.to_dict()
+
+        # Include protocol log (without sensitive data)
+        if state.protocol_log:
+            response_data["protocol_log"] = state.protocol_log.to_dict(include_sensitive=False)
 
         result = TestResult(
             idp_provider_id=state.idp_id,
