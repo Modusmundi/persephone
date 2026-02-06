@@ -6,6 +6,17 @@ from authtest.core.saml.artifact import (
     ArtifactResolveResponse,
     SAMLArtifact,
 )
+from authtest.core.saml.logout import (
+    LogoutSessionInfo,
+    LogoutStatus,
+    LogoutValidationCheck,
+    LogoutValidationResult,
+    SAMLLogoutHandler,
+    SAMLLogoutRequest,
+    SAMLLogoutResponse,
+    get_logout_status_description,
+    validate_logout_response,
+)
 from authtest.core.saml.signature import (
     SignatureInfo,
     SignatureLocation,
@@ -30,6 +41,16 @@ __all__ = [
     "ArtifactResolveResponse",
     "ArtifactResolver",
     "SAMLArtifact",
+    # Logout (SLO)
+    "LogoutSessionInfo",
+    "LogoutStatus",
+    "LogoutValidationCheck",
+    "LogoutValidationResult",
+    "SAMLLogoutHandler",
+    "SAMLLogoutRequest",
+    "SAMLLogoutResponse",
+    "get_logout_status_description",
+    "validate_logout_response",
     # SP
     "BINDING_HTTP_ARTIFACT",
     "BINDING_HTTP_POST",

@@ -42,6 +42,16 @@ after each iteration and it's included in prompts for context.
 - `from-preset --discover` flag auto-populates endpoints during IdP creation
 - Discovery results integrated with IdP storage model fields (issuer, authorization_endpoint, token_endpoint, userinfo_endpoint, jwks_uri)
 
+### SAML SLO Pattern
+- SLO module in `authtest/core/saml/logout.py` with SAMLLogoutRequest, SAMLLogoutResponse, SAMLLogoutHandler
+- Follows same flow pattern as SSO: SLOFlowState dataclass with to_dict()/from_dict() for session storage
+- SPInitiatedSLOFlow and IdPInitiatedSLOFlow classes in flows.py orchestrate the SLO flows
+- LogoutValidationResult aggregates validation checks similar to JWT TokenValidationResult
+- SP-initiated: create request → redirect to IdP → process response → validate
+- IdP-initiated: receive request → validate → create response → redirect back to IdP
+- Web routes support both HTTP-Redirect and HTTP-POST bindings
+- SP metadata includes SingleLogoutService endpoints for IdP configuration
+
 ---
 
 ## 2026-02-05 - US-011
@@ -185,5 +195,35 @@ after each iteration and it's included in prompts for context.
   - UserInfo endpoint for Azure AD is via Microsoft Graph: `https://graph.microsoft.com/oidc/userinfo`
   - Multi-tenant values (common, organizations, consumers) use same URL pattern but allow different account types
   - Federation metadata uses XML format at `/federationmetadata/2007-06/federationmetadata.xml`
+---
+
+## 2026-02-05 - US-018
+- **What was implemented**: SAML Single Logout (SLO) with SP-initiated and IdP-initiated flows
+- **Files created**:
+  - `authtest/core/saml/logout.py` (NEW) - SAMLLogoutRequest, SAMLLogoutResponse, SAMLLogoutHandler, LogoutStatus, LogoutSessionInfo, LogoutValidationCheck, LogoutValidationResult, validate_logout_response()
+  - `authtest/web/templates/saml/slo.html` (NEW) - SP-initiated SLO test configuration page with preflight checks and logout form
+  - `authtest/web/templates/saml/slo_result.html` (NEW) - SLO test result page with timeline, validation results, and XML display
+  - `authtest/web/templates/saml/slo_info.html` (NEW) - SLO configuration info page for IdP setup
+- **Files modified**:
+  - `authtest/core/saml/flows.py` - Added SLOFlowStatus, SLOFlowState, SLOFlowResult, SPInitiatedSLOFlow, IdPInitiatedSLOFlow classes
+  - `authtest/core/saml/__init__.py` - Exported all SLO classes and functions
+  - `authtest/web/routes/saml.py` - Added /slo, /slo/info, /slo/cancel routes, handle_slo_response(), handle_idp_initiated_slo()
+  - `authtest/web/templates/saml/index.html` - Enabled SLO section (was "Coming Soon")
+- **Features implemented**:
+  - SP-initiated logout request with configurable NameID, format, SessionIndex, and reason
+  - IdP-initiated logout handling (receiving LogoutRequest from IdP)
+  - LogoutResponse generation and validation
+  - Signature validation on LogoutResponse (when IdP certificate configured)
+  - Comprehensive validation checks: status code, InResponseTo, issuer, timestamps
+  - Session cleanup verification
+  - SP metadata updated with SingleLogoutService endpoints (HTTP-Redirect and HTTP-POST)
+  - Full web UI for testing SLO flows
+- **Learnings:**
+  - SAML SLO uses same deflate+base64 encoding as SSO for HTTP-Redirect binding
+  - LogoutRequest must include NameID (user identifier) and optionally SessionIndex
+  - LogoutResponse uses same status codes as other SAML responses (Success, Requester, Responder)
+  - IdP-initiated SLO requires SP to send LogoutResponse back to IdP after processing
+  - SLO flow state follows similar pattern to SSO flow state (stored in Flask session)
+  - SP metadata SingleLogoutService must be placed before NameIDFormat elements per SAML schema
 ---
 

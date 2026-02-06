@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}SLO Test Result - AuthTest{% endblock %}
+
+{% block content %}
+<style>
+    /* XML Syntax Highlighting */
+    .xml-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        font-family: 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
+        font-size: 0.75rem;
+        line-height: 1.5;
+    }
+    .xml-viewer .xml-tag { color: #569cd6; }
+    .xml-viewer .xml-bracket { color: #808080; }
+    .xml-viewer .xml-attr { color: #9cdcfe; }
+    .xml-viewer .xml-equals { color: #d4d4d4; }
+    .xml-viewer .xml-string { color: #ce9178; }
+    .xml-viewer .xml-comment { color: #6a9955; font-style: italic; }
+    .xml-viewer .xml-decl { color: #c586c0; }
+
+    .dark .xml-viewer {
+        background: #1e1e1e;
+        color: #d4d4d4;
+    }
+    .dark .xml-viewer .xml-tag { color: #569cd6; }
+    .dark .xml-viewer .xml-bracket { color: #808080; }
+    .dark .xml-viewer .xml-attr { color: #9cdcfe; }
+    .dark .xml-viewer .xml-string { color: #ce9178; }
+    .dark .xml-viewer .xml-comment { color: #6a9955; }
+    .dark .xml-viewer .xml-decl { color: #c586c0; }
+
+    /* Timeline styles */
+    .timeline {
+        position: relative;
+        padding-left: 2rem;
+    }
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 0.5rem;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e5e7eb;
+    }
+    .dark .timeline::before {
+        background: #374151;
+    }
+    .timeline-item {
+        position: relative;
+        padding-bottom: 1.5rem;
+    }
+    .timeline-item:last-child {
+        padding-bottom: 0;
+    }
+    .timeline-dot {
+        position: absolute;
+        left: -1.75rem;
+        width: 1rem;
+        height: 1rem;
+        border-radius: 50%;
+        border: 2px solid;
+        background: white;
+    }
+    .dark .timeline-dot {
+        background: #1f2937;
+    }
+    .timeline-dot.completed { border-color: #10b981; background: #10b981; }
+    .timeline-dot.failed { border-color: #ef4444; background: #ef4444; }
+    .timeline-dot.pending { border-color: #9ca3af; }
+</style>
+
+<div class="max-w-5xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">{% if flow_type == 'idp_initiated' %}IdP-Initiated{% else %}SP-Initiated{% endif %} SLO Test Result</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Tested against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    <!-- Result Summary -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    {% if result.outcome.value == 'passed' %}
+                    <div class="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-green-600 dark:text-green-400">Logout Successful</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                        {% if result.session_terminated %}
+                        <span class="inline-block mt-1 text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-1 rounded">
+                            Session Terminated
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% elif result.outcome.value == 'failed' %}
+                    <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-red-600 dark:text-red-400">Logout Failed</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% else %}
+                    <div class="w-16 h-16 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center mr-4">
+                        <svg class="w-10 h-10 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-bold text-yellow-600 dark:text-yellow-400">Error</h2>
+                        <p class="text-gray-600 dark:text-gray-400">{{ result.summary }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if result.duration_ms %}
+                <div class="text-right">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Duration</p>
+                    <p class="text-2xl font-semibold">{{ (result.duration_ms / 1000) | round(2) }}s</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Logout Flow Timeline -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Logout Flow Timeline</h2>
+        </div>
+        <div class="p-4">
+            <div class="timeline">
+                {% if flow_type == 'sp_initiated' %}
+                <!-- SP-Initiated Flow Steps -->
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Flow Started</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">SP initiated logout request</p>
+                        </div>
+                        {% if state.started_at %}
+                        <span class="text-xs text-gray-400">{{ state.started_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if state.request_id %}
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">LogoutRequest Sent</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Redirected to IdP for logout</p>
+                            <p class="text-xs font-mono text-gray-400 mt-1">NameID: {{ state.name_id }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if state.response_xml %}
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.status.value == 'completed' %}completed{% else %}failed{% endif %}"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">LogoutResponse Received</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {% if state.status.value == 'completed' %}Success status{% else %}Failed{% endif %}
+                            </p>
+                        </div>
+                        {% if state.completed_at %}
+                        <span class="text-xs text-gray-400">{{ state.completed_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <!-- IdP-Initiated Flow Steps -->
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">LogoutRequest Received</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">IdP sent logout request</p>
+                            <p class="text-xs font-mono text-gray-400 mt-1">NameID: {{ state.name_id }}</p>
+                        </div>
+                        {% if state.started_at %}
+                        <span class="text-xs text-gray-400">{{ state.started_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-dot {% if state.status.value == 'completed' %}completed{% else %}failed{% endif %}"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">Request {% if state.status.value == 'completed' %}Validated{% else %}Invalid{% endif %}</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {% if state.status.value == 'completed' %}
+                                Session terminated, response sent
+                                {% else %}
+                                Validation errors found
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {% if state.response_xml %}
+                <div class="timeline-item">
+                    <div class="timeline-dot completed"></div>
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="font-medium">LogoutResponse Sent</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">Redirected back to IdP</p>
+                        </div>
+                        {% if state.completed_at %}
+                        <span class="text-xs text-gray-400">{{ state.completed_at.strftime('%H:%M:%S') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Validation Results -->
+    {% if state.validation_result %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Validation Results</h2>
+        </div>
+        <div class="p-4">
+            {% if state.validation_result.checks %}
+            <ul class="space-y-2">
+                {% for check in state.validation_result.checks %}
+                <li class="flex items-start p-2 {% if not check.passed %}bg-red-50 dark:bg-red-900/20 rounded{% endif %}">
+                    {% if check.passed %}
+                    <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    {% endif %}
+                    <div class="flex-1">
+                        <p class="font-medium">{{ check.name }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ check.description }}</p>
+                        {% if check.expected and check.actual %}
+                        <div class="mt-1 text-xs">
+                            <span class="text-gray-500 dark:text-gray-400">Expected:</span>
+                            <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ check.expected }}</code>
+                            <span class="text-gray-500 dark:text-gray-400 ml-2">Actual:</span>
+                            <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ check.actual }}</code>
+                        </div>
+                        {% elif check.actual %}
+                        <p class="text-xs text-gray-400 mt-1 font-mono">{{ check.actual }}</p>
+                        {% endif %}
+                        {% if check.details %}
+                        <p class="text-xs text-red-600 dark:text-red-400 mt-1">{{ check.details }}</p>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% elif state.validation_result.validation_errors %}
+            <div class="p-3 bg-red-50 dark:bg-red-900/30 rounded-lg">
+                <p class="font-medium text-red-700 dark:text-red-400 text-sm">Validation Errors:</p>
+                <ul class="mt-1 text-sm text-red-600 dark:text-red-300 list-disc list-inside">
+                    {% for error in state.validation_result.validation_errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if state.validation_result.warnings %}
+            <div class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
+                <p class="font-medium text-yellow-700 dark:text-yellow-400 text-sm">Warnings:</p>
+                <ul class="mt-1 text-sm text-yellow-600 dark:text-yellow-300 list-disc list-inside">
+                    {% for warning in state.validation_result.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if state.validation_result.session_terminated %}
+            <div class="mt-4 p-3 bg-green-50 dark:bg-green-900/30 rounded-lg">
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    <p class="font-medium text-green-700 dark:text-green-400">Session Successfully Terminated</p>
+                </div>
+                <p class="text-sm text-green-600 dark:text-green-300 mt-1 ml-7">
+                    The logout flow completed successfully and the session has been terminated.
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Logout Details -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Logout Details</h2>
+        </div>
+        <div class="p-4">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">NameID</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.name_id or 'Not provided' }}</dd>
+                </div>
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">NameID Format</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.name_id_format or 'Not specified' }}</dd>
+                </div>
+                {% if state.session_index %}
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Session Index</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.session_index }}</dd>
+                </div>
+                {% endif %}
+                {% if state.logout_reason %}
+                <div>
+                    <dt class="text-gray-500 dark:text-gray-400">Logout Reason</dt>
+                    <dd class="font-mono text-xs mt-1 break-all">{{ state.logout_reason }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+
+    <!-- LogoutRequest XML (Collapsible) -->
+    {% if state.request_xml %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <details>
+            <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-semibold">LogoutRequest XML</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+            </summary>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex justify-end mb-2">
+                    <button
+                        onclick="copyToClipboard('request-xml')"
+                        class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                    >
+                        Copy XML
+                    </button>
+                </div>
+                <pre id="request-xml" class="xml-viewer whitespace-pre-wrap">{{ state.request_xml | pretty_xml | highlight_xml }}</pre>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    <!-- LogoutResponse XML (Collapsible) -->
+    {% if state.response_xml %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <details>
+            <summary class="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <span class="font-semibold">LogoutResponse XML</span>
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">(click to expand)</span>
+            </summary>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex justify-end mb-2">
+                    <button
+                        onclick="copyToClipboard('response-xml')"
+                        class="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 px-2 py-1 rounded transition-colors"
+                    >
+                        Copy XML
+                    </button>
+                </div>
+                <pre id="response-xml" class="xml-viewer whitespace-pre-wrap">{{ state.response_xml | pretty_xml | highlight_xml }}</pre>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="flex space-x-4">
+        <a
+            href="{{ url_for('saml.slo', idp_id=idp.id) }}"
+            class="flex-1 text-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Test Again
+        </a>
+        <a
+            href="{{ url_for('saml.index') }}"
+            class="flex-1 text-center bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-3 px-6 rounded-md transition-colors"
+        >
+            Back to SAML Tests
+        </a>
+    </div>
+
+    <p class="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+        Result saved with ID: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ result_id }}</code>
+    </p>
+</div>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    const text = element.textContent || element.innerText;
+    navigator.clipboard.writeText(text).then(function() {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = originalText; }, 1500);
+    }).catch(function(err) {
+        console.error('Failed to copy: ', err);
+    });
+}
+</script>
+{% endblock %}

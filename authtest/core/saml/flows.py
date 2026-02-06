@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from authtest.core.saml.sp import (
     BINDING_HTTP_ARTIFACT,
+    PreflightCheck,
     PreflightResult,
     SAMLResponse,
     SAMLServiceProvider,
@@ -612,6 +613,664 @@ class IdPInitiatedFlow:
             duration_ms=duration_ms,
             summary=summary,
         )
+
+
+class SLOFlowStatus(StrEnum):
+    """Status of a SAML SLO flow test."""
+
+    PENDING = "pending"
+    PREFLIGHT = "preflight"
+    REQUEST_SENT = "request_sent"
+    WAITING_RESPONSE = "waiting_response"
+    RESPONSE_RECEIVED = "response_received"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+@dataclass
+class SLOFlowState:
+    """Maintains state for an in-progress SAML SLO flow.
+
+    This state is stored in the Flask session to track the flow
+    across the logout redirect.
+    """
+
+    flow_id: str
+    idp_id: int
+    idp_name: str
+    status: SLOFlowStatus
+    flow_type: str  # "sp_initiated" or "idp_initiated"
+    request_id: str | None = None
+    request_xml: str | None = None
+    response_xml: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    name_id: str | None = None
+    name_id_format: str | None = None
+    session_index: str | None = None
+    logout_reason: str | None = None
+    validation_result: dict[str, Any] | None = None
+    error: str | None = None
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for session storage."""
+        return {
+            "flow_id": self.flow_id,
+            "idp_id": self.idp_id,
+            "idp_name": self.idp_name,
+            "status": self.status,
+            "flow_type": self.flow_type,
+            "request_id": self.request_id,
+            "request_xml": self.request_xml,
+            "response_xml": self.response_xml,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "name_id": self.name_id,
+            "name_id_format": self.name_id_format,
+            "session_index": self.session_index,
+            "logout_reason": self.logout_reason,
+            "validation_result": self.validation_result,
+            "error": self.error,
+            "options": self.options,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SLOFlowState:
+        """Reconstruct from dictionary."""
+        return cls(
+            flow_id=data["flow_id"],
+            idp_id=data["idp_id"],
+            idp_name=data["idp_name"],
+            status=SLOFlowStatus(data["status"]),
+            flow_type=data["flow_type"],
+            request_id=data.get("request_id"),
+            request_xml=data.get("request_xml"),
+            response_xml=data.get("response_xml"),
+            started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
+            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+            name_id=data.get("name_id"),
+            name_id_format=data.get("name_id_format"),
+            session_index=data.get("session_index"),
+            logout_reason=data.get("logout_reason"),
+            validation_result=data.get("validation_result"),
+            error=data.get("error"),
+            options=data.get("options", {}),
+        )
+
+
+@dataclass
+class SLOFlowResult:
+    """Result of a SAML SLO test."""
+
+    flow_state: SLOFlowState
+    outcome: TestOutcome
+    duration_ms: int | None = None
+    summary: str = ""
+    session_terminated: bool = False
+
+
+class SPInitiatedSLOFlow:
+    """Orchestrates the SP-Initiated Single Logout flow.
+
+    This flow follows these steps:
+    1. Run pre-flight checks (SLO URL configured, session info available)
+    2. Generate LogoutRequest
+    3. Redirect user to IdP SLO endpoint
+    4. Process LogoutResponse callback
+    5. Verify session termination
+    6. Record test result
+    """
+
+    def __init__(
+        self,
+        idp: IdPProvider,
+        db: Database,
+        base_url: str = "https://localhost:8443",
+    ) -> None:
+        """Initialize the flow handler.
+
+        Args:
+            idp: Identity Provider configuration.
+            db: Database instance for recording results.
+            base_url: Base URL of this application.
+        """
+        from authtest.core.saml.logout import SAMLLogoutHandler
+
+        self.idp = idp
+        self.db = db
+        self.base_url = base_url
+        self.logout_handler = SAMLLogoutHandler(idp, base_url=base_url)
+
+    def start_flow(
+        self,
+        name_id: str,
+        name_id_format: str = "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
+        session_index: str | None = None,
+        logout_reason: str | None = None,
+    ) -> SLOFlowState:
+        """Start a new SP-Initiated SLO flow.
+
+        Args:
+            name_id: The NameID of the user to logout.
+            name_id_format: The format of the NameID.
+            session_index: Optional SessionIndex from the original assertion.
+            logout_reason: Optional reason for logout.
+
+        Returns:
+            SLOFlowState with preflight results.
+        """
+        flow_id = f"slo_flow_{secrets.token_hex(16)}"
+
+        # Run pre-flight checks
+        preflight = self._run_preflight_checks()
+
+        state = SLOFlowState(
+            flow_id=flow_id,
+            idp_id=self.idp.id,
+            idp_name=self.idp.name,
+            status=SLOFlowStatus.PREFLIGHT,
+            flow_type="sp_initiated",
+            started_at=datetime.now(UTC),
+            name_id=name_id,
+            name_id_format=name_id_format,
+            session_index=session_index,
+            logout_reason=logout_reason,
+            options={
+                "preflight": _slo_preflight_to_dict(preflight),
+            },
+        )
+
+        return state
+
+    def _run_preflight_checks(self) -> PreflightResult:
+        """Run pre-flight checks for SLO."""
+        checks: list[PreflightCheck] = []
+        warnings: list[str] = []
+
+        # Check 1: IdP SLO URL configured
+        slo_url = self.idp.slo_url
+        slo_check = PreflightCheck(
+            name="IdP SLO URL",
+            description="Identity Provider SLO endpoint is configured",
+            passed=bool(slo_url),
+            details=slo_url or "Not configured",
+        )
+        checks.append(slo_check)
+
+        if not slo_url:
+            warnings.append(
+                "IdP SLO URL not configured. Single Logout requires the IdP's "
+                "SingleLogoutService endpoint."
+            )
+
+        # Check 2: IdP Entity ID configured
+        entity_id_check = PreflightCheck(
+            name="IdP Entity ID",
+            description="Identity Provider Entity ID is configured",
+            passed=bool(self.idp.entity_id),
+            details=self.idp.entity_id or "Not configured",
+        )
+        checks.append(entity_id_check)
+
+        # Check 3: SP Entity ID valid
+        sp_entity_check = PreflightCheck(
+            name="SP Entity ID",
+            description="Service Provider Entity ID is valid",
+            passed=bool(self.logout_handler.sp_entity_id),
+            details=self.logout_handler.sp_entity_id,
+        )
+        checks.append(sp_entity_check)
+
+        # Check 4: IdP certificate (for signature validation)
+        has_cert = bool(self.idp.x509_cert)
+        cert_check = PreflightCheck(
+            name="IdP Certificate",
+            description="IdP certificate is configured (for signature validation)",
+            passed=has_cert,
+            details="Configured" if has_cert else "Not configured (signatures won't be validated)",
+        )
+        checks.append(cert_check)
+
+        if not has_cert:
+            warnings.append(
+                "IdP certificate not configured. LogoutResponse signatures cannot be validated."
+            )
+
+        # SLO URL must be configured for the flow to work
+        all_passed = bool(slo_url) and bool(self.idp.entity_id)
+
+        return PreflightResult(
+            checks=checks,
+            all_passed=all_passed,
+            warnings=warnings,
+        )
+
+    def initiate_logout(self, state: SLOFlowState) -> tuple[SLOFlowState, str]:
+        """Initiate the SLO redirect after preflight passes.
+
+        Args:
+            state: Current flow state.
+
+        Returns:
+            Tuple of (updated state, redirect URL).
+
+        Raises:
+            ValueError: If preflight checks failed or flow is in wrong state.
+        """
+        from authtest.core.saml.logout import LogoutSessionInfo
+
+        if state.status != SLOFlowStatus.PREFLIGHT:
+            raise ValueError(f"Cannot initiate SLO from state: {state.status}")
+
+        preflight = state.options.get("preflight", {})
+        if not preflight.get("all_passed", False):
+            state.status = SLOFlowStatus.FAILED
+            state.error = "Pre-flight checks failed"
+            return state, ""
+
+        # Create session info for logout
+        session_info = LogoutSessionInfo(
+            name_id=state.name_id or "",
+            name_id_format=state.name_id_format or "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
+            session_index=state.session_index,
+            idp_entity_id=self.idp.entity_id,
+        )
+
+        # Create LogoutRequest
+        request = self.logout_handler.create_logout_request(
+            session_info=session_info,
+            reason=state.logout_reason,
+        )
+
+        # Build redirect URL
+        redirect_url = self.logout_handler.build_logout_redirect_url(
+            request,
+            relay_state=state.flow_id,
+        )
+
+        # Update state
+        state.status = SLOFlowStatus.REQUEST_SENT
+        state.request_id = request.id
+        state.request_xml = request.to_xml()
+
+        return state, redirect_url
+
+    def process_response(
+        self,
+        state: SLOFlowState,
+        encoded_response: str,
+        is_redirect: bool = True,
+    ) -> SLOFlowState:
+        """Process the LogoutResponse from the IdP.
+
+        Args:
+            state: Current flow state.
+            encoded_response: Base64-encoded LogoutResponse.
+            is_redirect: True if from HTTP-Redirect binding.
+
+        Returns:
+            Updated flow state with response data.
+        """
+        from authtest.core.saml.logout import validate_logout_response
+
+        state.completed_at = datetime.now(UTC)
+
+        try:
+            response = self.logout_handler.process_logout_response(
+                encoded_response,
+                expected_request_id=state.request_id,
+                is_redirect=is_redirect,
+            )
+            state.response_xml = response.raw_xml
+
+            # Validate the response
+            validation = validate_logout_response(
+                response,
+                expected_request_id=state.request_id,
+                expected_issuer=self.idp.entity_id,
+            )
+            state.validation_result = validation.to_dict()
+
+            if validation.all_passed and response.is_success:
+                state.status = SLOFlowStatus.COMPLETED
+            else:
+                state.status = SLOFlowStatus.FAILED
+                errors = [c.details for c in validation.checks if not c.passed and c.details]
+                state.error = "; ".join(errors) if errors else "Logout validation failed"
+
+        except Exception as e:
+            state.status = SLOFlowStatus.FAILED
+            state.error = f"Error processing response: {e}"
+
+        return state
+
+    def record_result(self, state: SLOFlowState) -> int:
+        """Record the test result to the database.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            ID of the created TestResult record.
+        """
+        from authtest.storage.models import TestResult
+
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        if state.status == SLOFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+        elif state.status == SLOFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+        else:
+            outcome = TestOutcome.ERROR
+
+        request_data = {
+            "flow_type": "sp_initiated_slo",
+            "request_id": state.request_id,
+            "request_xml": state.request_xml,
+            "name_id": state.name_id,
+            "name_id_format": state.name_id_format,
+            "session_index": state.session_index,
+            "logout_reason": state.logout_reason,
+            "options": state.options,
+        }
+
+        response_data = None
+        if state.response_xml or state.validation_result:
+            response_data = {
+                "response_xml": state.response_xml,
+                "validation": state.validation_result,
+            }
+
+        result = TestResult(
+            idp_provider_id=state.idp_id,
+            test_name="SP-Initiated SLO",
+            test_type="saml",
+            status=outcome.value,
+            error_message=state.error,
+            started_at=state.started_at or datetime.now(UTC),
+            completed_at=state.completed_at,
+            duration_ms=duration_ms,
+            request_data=request_data,
+            response_data=response_data,
+        )
+
+        session = self.db.get_session()
+        try:
+            session.add(result)
+            session.commit()
+            result_id = result.id
+        finally:
+            session.close()
+
+        return result_id
+
+    def get_flow_result(self, state: SLOFlowState) -> SLOFlowResult:
+        """Get the final result of the flow.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            SLOFlowResult with outcome summary.
+        """
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        validation = state.validation_result or {}
+        session_terminated = validation.get("session_terminated", False)
+
+        if state.status == SLOFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+            summary = f"Successfully logged out: {state.name_id}"
+        elif state.status == SLOFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+            summary = state.error or "Logout failed"
+        else:
+            outcome = TestOutcome.ERROR
+            summary = state.error or f"Flow ended in unexpected state: {state.status}"
+
+        return SLOFlowResult(
+            flow_state=state,
+            outcome=outcome,
+            duration_ms=duration_ms,
+            summary=summary,
+            session_terminated=session_terminated,
+        )
+
+
+class IdPInitiatedSLOFlow:
+    """Orchestrates the IdP-Initiated Single Logout flow.
+
+    In IdP-Initiated SLO, the IdP sends an unsolicited LogoutRequest
+    to the SP's SLO endpoint. This flow:
+    1. Receives LogoutRequest at SLO endpoint
+    2. Validates the request
+    3. Terminates local session
+    4. Sends LogoutResponse back to IdP
+    5. Records test result
+    """
+
+    def __init__(
+        self,
+        idp: IdPProvider,
+        db: Database,
+        base_url: str = "https://localhost:8443",
+    ) -> None:
+        """Initialize the flow handler.
+
+        Args:
+            idp: Identity Provider configuration.
+            db: Database instance for recording results.
+            base_url: Base URL of this application.
+        """
+        from authtest.core.saml.logout import SAMLLogoutHandler
+
+        self.idp = idp
+        self.db = db
+        self.base_url = base_url
+        self.logout_handler = SAMLLogoutHandler(idp, base_url=base_url)
+
+    def process_logout_request(
+        self,
+        encoded_request: str,
+        is_redirect: bool = True,
+        relay_state: str | None = None,
+    ) -> tuple[SLOFlowState, str]:
+        """Process a LogoutRequest from the IdP.
+
+        Args:
+            encoded_request: Base64-encoded LogoutRequest.
+            is_redirect: True if from HTTP-Redirect binding.
+            relay_state: Optional RelayState from the request.
+
+        Returns:
+            Tuple of (SLOFlowState, redirect URL for LogoutResponse).
+        """
+        from authtest.core.saml.logout import LogoutStatus
+
+        flow_id = f"idp_slo_flow_{secrets.token_hex(16)}"
+        started_at = datetime.now(UTC)
+
+        state = SLOFlowState(
+            flow_id=flow_id,
+            idp_id=self.idp.id,
+            idp_name=self.idp.name,
+            status=SLOFlowStatus.WAITING_RESPONSE,
+            flow_type="idp_initiated",
+            started_at=started_at,
+        )
+
+        # Parse and validate the request
+        request, validation_errors = self.logout_handler.process_logout_request(
+            encoded_request, is_redirect=is_redirect
+        )
+
+        state.request_id = request.id
+        state.request_xml = request.to_xml() if request.id else None
+        state.name_id = request.name_id
+        state.name_id_format = request.name_id_format
+        state.session_index = request.session_index
+
+        # Determine response status based on validation
+        if validation_errors:
+            status_code = LogoutStatus.REQUESTER.value
+            status_message = "; ".join(validation_errors)
+            state.status = SLOFlowStatus.FAILED
+            state.error = status_message
+        else:
+            status_code = LogoutStatus.SUCCESS.value
+            status_message = None
+            state.status = SLOFlowStatus.COMPLETED
+
+        state.completed_at = datetime.now(UTC)
+
+        # Create and build response
+        try:
+            response = self.logout_handler.create_logout_response(
+                request_id=request.id,
+                status_code=status_code,
+                status_message=status_message,
+            )
+            state.response_xml = response.raw_xml
+
+            redirect_url = self.logout_handler.build_response_redirect_url(
+                response,
+                relay_state=relay_state,
+            )
+
+            # Store validation info
+            state.validation_result = {
+                "request_valid": len(validation_errors) == 0,
+                "validation_errors": validation_errors,
+                "session_terminated": state.status == SLOFlowStatus.COMPLETED,
+            }
+
+        except ValueError as e:
+            state.status = SLOFlowStatus.FAILED
+            state.error = str(e)
+            redirect_url = ""
+
+        return state, redirect_url
+
+    def record_result(self, state: SLOFlowState) -> int:
+        """Record the test result to the database.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            ID of the created TestResult record.
+        """
+        from authtest.storage.models import TestResult
+
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        if state.status == SLOFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+        elif state.status == SLOFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+        else:
+            outcome = TestOutcome.ERROR
+
+        request_data = {
+            "flow_type": "idp_initiated_slo",
+            "request_id": state.request_id,
+            "request_xml": state.request_xml,
+            "name_id": state.name_id,
+            "name_id_format": state.name_id_format,
+            "session_index": state.session_index,
+        }
+
+        response_data = {
+            "response_xml": state.response_xml,
+            "validation": state.validation_result,
+        }
+
+        result = TestResult(
+            idp_provider_id=state.idp_id,
+            test_name="IdP-Initiated SLO",
+            test_type="saml",
+            status=outcome.value,
+            error_message=state.error,
+            started_at=state.started_at or datetime.now(UTC),
+            completed_at=state.completed_at,
+            duration_ms=duration_ms,
+            request_data=request_data,
+            response_data=response_data,
+        )
+
+        session = self.db.get_session()
+        try:
+            session.add(result)
+            session.commit()
+            result_id = result.id
+        finally:
+            session.close()
+
+        return result_id
+
+    def get_flow_result(self, state: SLOFlowState) -> SLOFlowResult:
+        """Get the final result of the flow.
+
+        Args:
+            state: Completed flow state.
+
+        Returns:
+            SLOFlowResult with outcome summary.
+        """
+        duration_ms = None
+        if state.started_at and state.completed_at:
+            duration = state.completed_at - state.started_at
+            duration_ms = int(duration.total_seconds() * 1000)
+
+        validation = state.validation_result or {}
+        session_terminated = validation.get("session_terminated", False)
+
+        if state.status == SLOFlowStatus.COMPLETED:
+            outcome = TestOutcome.PASSED
+            summary = f"IdP-Initiated logout successful: {state.name_id}"
+        elif state.status == SLOFlowStatus.FAILED:
+            outcome = TestOutcome.FAILED
+            summary = state.error or "Logout request validation failed"
+        else:
+            outcome = TestOutcome.ERROR
+            summary = state.error or f"Flow ended in unexpected state: {state.status}"
+
+        return SLOFlowResult(
+            flow_state=state,
+            outcome=outcome,
+            duration_ms=duration_ms,
+            summary=summary,
+            session_terminated=session_terminated,
+        )
+
+
+def _slo_preflight_to_dict(preflight: PreflightResult) -> dict[str, Any]:
+    """Convert PreflightResult to dict for SLO flow."""
+    return {
+        "all_passed": preflight.all_passed,
+        "warnings": preflight.warnings,
+        "checks": [
+            {
+                "name": c.name,
+                "description": c.description,
+                "passed": c.passed,
+                "details": c.details,
+            }
+            for c in preflight.checks
+        ],
+    }
 
 
 class ArtifactFlow:

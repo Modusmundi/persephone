@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Single Logout Test - AuthTest{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">SP-Initiated Single Logout Test</h1>
+    <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Testing against: <span class="font-semibold">{{ idp.display_name or idp.name }}</span>
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="mb-6">
+        {% for category, message in messages %}
+        <div class="p-4 rounded-lg mb-2 {% if category == 'error' %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200{% elif category == 'info' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200{% else %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Preflight Checks -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Pre-flight Checks</h2>
+        </div>
+        <div class="p-4">
+            {% if preflight.checks %}
+            <ul class="space-y-2">
+                {% for check in preflight.checks %}
+                <li class="flex items-start">
+                    {% if check.passed %}
+                    <svg class="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    {% else %}
+                    <svg class="w-5 h-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                    {% endif %}
+                    <div>
+                        <p class="font-medium">{{ check.name }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ check.description }}</p>
+                        {% if check.details %}
+                        <p class="text-xs text-gray-400 dark:text-gray-500 font-mono mt-1">{{ check.details }}</p>
+                        {% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if preflight.warnings %}
+            <div class="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
+                <p class="font-medium text-yellow-700 dark:text-yellow-400 text-sm">Warnings:</p>
+                <ul class="mt-1 text-sm text-yellow-600 dark:text-yellow-300 list-disc list-inside">
+                    {% for warning in preflight.warnings %}
+                    <li>{{ warning }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Logout Configuration Form -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold">Logout Configuration</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Configure the logout request parameters. In production, these would come from the SSO session.
+            </p>
+        </div>
+        <form action="{{ url_for('saml.slo') }}" method="POST" class="p-4">
+            <div class="space-y-4">
+                <!-- NameID -->
+                <div>
+                    <label class="block text-sm font-medium mb-2" for="name_id">
+                        NameID (User Identifier)
+                    </label>
+                    <input
+                        type="text"
+                        name="name_id"
+                        id="name_id"
+                        value="{{ state.name_id or 'test-user@example.com' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="user@example.com"
+                        required
+                    >
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        The user identifier from the original SSO assertion.
+                    </p>
+                </div>
+
+                <!-- NameID Format -->
+                <div>
+                    <label class="block text-sm font-medium mb-2" for="name_id_format">
+                        NameID Format
+                    </label>
+                    <select
+                        name="name_id_format"
+                        id="name_id_format"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress" selected>Email Address</option>
+                        <option value="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">Persistent</option>
+                        <option value="urn:oasis:names:tc:SAML:2.0:nameid-format:transient">Transient</option>
+                        <option value="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified">Unspecified</option>
+                    </select>
+                </div>
+
+                <!-- Session Index (optional) -->
+                <div>
+                    <label class="block text-sm font-medium mb-2" for="session_index">
+                        Session Index (Optional)
+                    </label>
+                    <input
+                        type="text"
+                        name="session_index"
+                        id="session_index"
+                        value="{{ state.session_index or '' }}"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="_session_abc123"
+                    >
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        The SessionIndex from the original AuthnStatement (if available).
+                    </p>
+                </div>
+
+                <!-- Logout Reason (optional) -->
+                <div>
+                    <label class="block text-sm font-medium mb-2" for="logout_reason">
+                        Logout Reason (Optional)
+                    </label>
+                    <select
+                        name="logout_reason"
+                        id="logout_reason"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">None</option>
+                        <option value="urn:oasis:names:tc:SAML:2.0:logout:user">User Initiated</option>
+                        <option value="urn:oasis:names:tc:SAML:2.0:logout:admin">Admin Initiated</option>
+                        <option value="urn:oasis:names:tc:SAML:2.0:logout:global-timeout">Global Timeout</option>
+                        <option value="urn:oasis:names:tc:SAML:2.0:logout:sp-timeout">SP Timeout</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="mt-6 flex space-x-4">
+                {% if preflight.all_passed %}
+                <button
+                    type="submit"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+                >
+                    Send LogoutRequest
+                </button>
+                {% else %}
+                <button
+                    type="button"
+                    disabled
+                    class="flex-1 bg-gray-400 text-white font-semibold py-2 px-4 rounded-md cursor-not-allowed"
+                    title="Pre-flight checks must pass before initiating SLO"
+                >
+                    Pre-flight Checks Failed
+                </button>
+                {% endif %}
+                <a
+                    href="{{ url_for('saml.index') }}"
+                    class="flex-1 text-center bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-semibold py-2 px-4 rounded-md transition-colors"
+                >
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Info Panel -->
+    <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
+        <h3 class="font-semibold text-blue-800 dark:text-blue-300 mb-2">How SP-Initiated SLO Works</h3>
+        <ol class="text-sm text-blue-700 dark:text-blue-200 list-decimal list-inside space-y-1">
+            <li>SP generates a LogoutRequest with the user's NameID and optional SessionIndex</li>
+            <li>User is redirected to the IdP's SingleLogoutService endpoint</li>
+            <li>IdP terminates the session and sends a LogoutResponse back to the SP</li>
+            <li>SP validates the response and confirms session termination</li>
+        </ol>
+        <p class="text-xs text-blue-600 dark:text-blue-400 mt-3">
+            Note: This test uses HTTP-Redirect binding for the request and accepts either Redirect or POST for the response.
+        </p>
+    </div>
+</div>
+{% endblock %}
