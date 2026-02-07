@@ -1,13 +1,13 @@
 {
-  "id": "25d82f5e-e3a0-4aea-88db-13c8150ce3e5",
+  "id": "fdc95fe0-e814-4f4f-9f19-f5b60816bca3",
   "status": "running",
-  "startedAt": "2026-02-06T01:00:15.694Z",
-  "updatedAt": "2026-02-06T23:30:50.902Z",
+  "startedAt": "2026-02-07T11:05:04.272Z",
+  "updatedAt": "2026-02-07T11:05:04.272Z",
   "agentPlugin": "claude",
   "trackerPlugin": "json",
-  "currentIteration": 20,
-  "maxIterations": 21,
+  "currentIteration": 0,
+  "maxIterations": 10,
   "totalTasks": 0,
-  "tasksCompleted": 19,
+  "tasksCompleted": 0,
   "cwd": "/Users/modus/Documents/workspace/persephone"
 }
