@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class UTCAwareDateTime(TypeDecorator):
+    """DateTime column type that always returns timezone-aware UTC datetimes.
+
+    SQLite has no native timezone support, so SQLAlchemy returns naive datetimes
+    for DateTime(timezone=True) columns. This type attaches UTC tzinfo on load,
+    making comparisons with datetime.now(UTC) safe throughout the application.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value: datetime | None, dialect: object) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class Base(DeclarativeBase):
@@ -60,10 +78,10 @@ class IdPProvider(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCAwareDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCAwareDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships
@@ -114,10 +132,10 @@ class ClientConfig(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCAwareDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCAwareDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships
@@ -149,13 +167,13 @@ class Certificate(Base):
     subject: Mapped[str | None] = mapped_column(String(500))
     issuer_cn: Mapped[str | None] = mapped_column(String(500))
     serial_number: Mapped[str | None] = mapped_column(String(100))
-    not_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    not_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    not_before: Mapped[datetime | None] = mapped_column(UTCAwareDateTime())
+    not_after: Mapped[datetime | None] = mapped_column(UTCAwareDateTime())
     fingerprint_sha256: Mapped[str | None] = mapped_column(String(64))
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCAwareDateTime(), server_default=func.now()
     )
 
     def __repr__(self) -> str:
@@ -184,8 +202,8 @@ class TestResult(Base):
     error_details: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     # Timing data
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(UTCAwareDateTime(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCAwareDateTime())
     duration_ms: Mapped[int | None] = mapped_column()
 
     # Test data (assertions, claims, etc.)
@@ -214,7 +232,7 @@ class AppSetting(Base):
 
     # Timestamps
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCAwareDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     def __repr__(self) -> str:
@@ -234,7 +252,7 @@ class MigrationHistory(Base):
     version: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(String(500))
     applied_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCAwareDateTime(), server_default=func.now()
     )
 
     def __repr__(self) -> str:
@@ -257,10 +275,10 @@ class AppUser(Base):
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        UTCAwareDateTime(), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        UTCAwareDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     # Relationships
@@ -286,9 +304,9 @@ class UserSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)  # SHA-256 hex
 
     # Session timing
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_activity: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCAwareDateTime(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCAwareDateTime(), nullable=False)
+    last_activity: Mapped[datetime] = mapped_column(UTCAwareDateTime(), nullable=False)
 
     # Relationships
     user: Mapped[AppUser] = relationship(back_populates="sessions")
