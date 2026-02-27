@@ -53,6 +53,7 @@ docker/
 
 # Development files
 *.md
+!README.md
 LICENSE
 Makefile
 

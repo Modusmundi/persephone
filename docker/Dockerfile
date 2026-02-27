@@ -1,19 +1,20 @@
 # Multi-stage build for AuthTest
 
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (including SQLCipher for sqlcipher3)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
     libssl-dev \
+    libsqlcipher-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
-COPY pyproject.toml .
+COPY pyproject.toml README.md ./
 COPY authtest/ authtest/
 
 # Install dependencies
@@ -25,13 +26,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies for WeasyPrint
+# Install runtime dependencies for WeasyPrint and SQLCipher
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
-    libgdk-pixbuf2.0-0 \
+    libgdk-pixbuf-xlib-2.0-0 \
     libffi8 \
     shared-mime-info \
+    libsqlcipher1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
