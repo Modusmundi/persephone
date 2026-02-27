@@ -189,7 +189,7 @@
                             {{ result.started_at.strftime('%Y-%m-%d %H:%M') if result.started_at else 'N/A' }}
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                            {{ result.duration_ms }}ms{% if result.duration_ms else 'N/A' %}
+                            {{ result.duration_ms ~ 'ms' if result.duration_ms is not none else 'N/A' }}
                         </td>
                         <td class="px-4 py-3 text-right">
                             <a href="{{ url_for('history.show', test_id=result.id) }}" class="text-blue-500 hover:text-blue-600 text-sm mr-2">View</a>
